@@ -1,0 +1,89 @@
+// This source code is subject to the terms of the Mozilla Public License 2.0 at https://mozilla.org/MPL/2.0/
+// © aminmasood54
+
+//@version=5
+strategy("Polynomial Regression")
+import aminmasood54/Polynomial/9 as PR
+AST = input.bool(defval = true,title = 'Short',group = 'Trade')
+ALT = input.bool(defval = true,title = 'Long',group = 'Trade')
+SwitchCond = input.int(defval = 1,title = 'Switch Condition(1)',group = 'Trade',step = 1,minval = 1,maxval = 2)
+// =============================================
+BLen = input.int(10,title = 'Back length(2)',group = 'Poly')
+NONP = input.int(2,title = 'Number of new points(3)',group = 'Poly')
+DOP = input.int(4,title = 'Degree of polynomial(4)',group = 'Poly')
+MaxStep = input.int(defval = 5,title = 'Maximum Step(5)',group = 'Poly')
+// ===============================================
+ALen = input.int(14,title = 'Atr length(6)',group = 'ATR')
+Am = input.float(2,title = 'Atr multiplier(7)',group = 'ATR',step = 0.5)
+result = ta.rma(ta.tr(true), 14)
+upper = high + result * Am
+lower = low - result * Am
+// ===============================================
+// ===============================================
+ConsiderError = input.bool(defval = false,title = 'Consider Error',group = 'Error')
+MaximumError = input.float(defval = 0.01,title = 'Maximum Error(8)',minval = 0.01,maxval = 2,step = 0.01,group = 'Error')
+//===================================================
+error = array.new<float>(MaxStep)
+Y = matrix.new<float>(1,NONP,0)
+for i=1 to MaxStep
+    [y,Error] = PR.PolyNomial(Dop = DOP,n = BLen,step = i,nonp = NONP)
+    array.set(error,i-1,Error)
+    matrix.concat(Y,matrix.transpose(y))
+
+minErr = array.min(error)
+index = array.indexof(error,minErr)
+minErData = matrix.row(Y,index+1)
+maxVal = array.max(minErData)
+indMax = array.indexof(minErData,maxVal)
+minVal = array.min(minErData)
+indMin = array.indexof(minErData,minVal)
+plot(minErr)
+// ========================================Operations
+BCond = ((maxVal>upper and minVal>lower) or (maxVal>upper and minVal<lower and indMax<indMin))
+SCond = ((maxVal<upper and minVal<lower) or (maxVal>upper and minVal<lower and indMax>indMin))
+if ConsiderError
+    BCond := BCond and minErr<MaximumError
+    SCond := SCond and minErr<MaximumError
+if SwitchCond==2
+    BCond := ((maxVal<upper and minVal<lower) or (maxVal>upper and minVal<lower and indMax>indMin))
+    SCond := ((maxVal>upper and minVal>lower) or (maxVal>upper and minVal<lower and indMax<indMin))
+    if ConsiderError
+        BCond := BCond and minErr<MaximumError
+        SCond := SCond and minErr<MaximumError
+bgcolor(color = BCond?color.new(color.green,60):SCond?color.new(color.red,60):na)
+// ================================
+ActiveTrade = (SCond or BCond) or (strategy.position_size!=0)
+// ====================
+if (ActiveTrade)
+    if AST
+        SE = strategy.position_size==0 and SCond
+        TPS=0.0
+        SLS=0.0
+        SIndex = 0
+        if SE
+            strategy.entry("SE",strategy.short)
+            TPS:=lower
+            SLS:=upper
+        else
+            TPS:=TPS[1]
+            SLS:=SLS[1]
+        strategy.exit("EXSE","SE",stop = SLS,limit = TPS)
+    if ALT
+        LE = strategy.position_size==0 and BCond
+        TPL=0.0
+        SLL=0.0
+        LIndex = 0
+        if LE
+            strategy.entry("LE",strategy.long)
+            TPL:=upper
+            SLL:=lower
+        else
+            TPL:=TPL[1]
+            SLL:=SLL[1]
+        strategy.exit("EXLE","LE",stop = SLL,limit = TPL)
+
+
+
+
+
+

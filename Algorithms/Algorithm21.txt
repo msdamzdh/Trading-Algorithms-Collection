@@ -1,0 +1,112 @@
+//@version=5
+//Basic Hull Ma Pack tinkered by InSilico 
+strategy('Hull Suite by InSilico', overlay=true,initial_capital=100,
+     default_qty_type=strategy.percent_of_equity,default_qty_value=100,
+     commission_type=strategy.commission.percent,commission_value=0.02)
+src = input(close, title='Source')
+//===================================================================================================================Hull Inputs
+modeSwitch = input.string('Hma', title='Hull Variation', options=['Hma', 'Thma', 'Ehma'],group = 'Hull')
+length = input(55, title='Length(180-200 for floating S/R , 55 for swing entry)',group = 'Hull')
+lengthMult = input(1.0, title='Length multiplier (Used to view higher timeframes with straight band)',group = 'Hull')
+useHtf = input(false, title='Show Hull MA from X timeframe? (good for scalping)',group = 'Hull')
+htf = input.timeframe('240', title='Higher timeframe',group = 'Hull')
+switchColor = input(true, 'Color Hull according to trend?',group = 'Hull')
+candleCol = input(false, title='Color candles based on Hull\'s Trend?',group = 'Hull')
+visualSwitch = input(true, title='Show as a Band?',group = 'Hull')
+thicknesSwitch = input(1, title='Line Thickness',group = 'Hull')
+transpSwitch = input.int(40, title='Band Transparency', step=5,group = 'Hull')
+// ==================================================================================================================Ema Inputs
+EmaLen = input.int(defval = 200,title = 'Ema length',group = 'Ema')
+// ==================================================================================================================Trade Inputs
+ActiveTrade = input.bool(defval=true, title='Active Trading?', group='Trade')
+TPM = input.float(defval = 2,title = 'R/R',step = 0.1, group='Trade')
+UseBanSL = input.bool( defval=true,title='Use Ban SL?',group='Trade')
+Percent = input.float(defval =1.1, title='SL Percent',step = 0.1, group='Trade')
+UseEMAForTrend = input.bool(defval=true,title='Use EMA For Trend?', group='Trade')
+Lev = input.int(defval = 1,title = 'Leverage',group='Trade')
+Start_time = input.time(defval =timestamp("1 Jan 2020 00:00 +0000"), title="Start Date",group='Trade')
+End_Time = input.time(defval = timestamp("1 Jan 9999 00:00 +0000"), title="End Date",group='Trade')
+//==================================================================================================================Hull Calculations
+// ==============================Functions
+HMA(_src, _length) =>
+    ta.wma(2 * ta.wma(_src, _length / 2) - ta.wma(_src, _length), math.round(math.sqrt(_length)))
+EHMA(_src, _length) =>
+    ta.ema(2 * ta.ema(_src, _length / 2) - ta.ema(_src, _length), math.round(math.sqrt(_length)))
+THMA(_src, _length) =>
+    ta.wma(ta.wma(_src, _length / 3) * 3 - ta.wma(_src, _length / 2) - ta.wma(_src, _length), _length)
+Mode(modeSwitch, src, len) =>
+    modeSwitch == 'Hma' ? HMA(src, len) : modeSwitch == 'Ehma' ? EHMA(src, len) : modeSwitch == 'Thma' ? THMA(src, len / 2) : na
+// ====================Operations
+_hull = Mode(modeSwitch, src, int(length * lengthMult))
+HULL = useHtf ? request.security(syminfo.ticker, htf, _hull) : _hull
+MHULL = HULL[0]
+SHULL = HULL[2]
+// ================================================================================================================Ema Calculations
+Ema = ta.ema(src,EmaLen)
+// ================================================================================================================Plots
+// ===========================================================================Plot Hull
+hullColor = switchColor ? HULL > HULL[2] ? #00ff00 : #ff0000 : #ff9800
+Fi1 = plot(MHULL, title='MHULL', color=color.new(hullColor,50), linewidth=thicknesSwitch)
+Fi2 = plot(visualSwitch ? SHULL : na, title='SHULL', color=color.new(hullColor,50), linewidth=thicknesSwitch)
+alertcondition(ta.crossover(MHULL, SHULL), title='Hull trending up.', message='Hull trending up.')
+alertcondition(ta.crossover(SHULL, MHULL), title='Hull trending down.', message='Hull trending down.')
+fill(Fi1, Fi2, title='Band Filler', color=color.new(hullColor,transpSwitch))
+barcolor(color=candleCol ? switchColor ? hullColor : na : na)
+// ===========================================================================Plot Ema
+plot(Ema,linewidth = 2,color=color.black)
+// ===============================================================================================================
+// ===============================================================================================================Trade Operations
+BCond = ta.crossover(MHULL, SHULL)
+SCond = ta.crossover(SHULL, MHULL)
+
+if UseEMAForTrend
+    BCond := BCond and close>Ema
+    SCond := SCond and close<Ema
+
+LOn = strategy.position_size>0
+SOn = strategy.position_size<0
+NOn = strategy.position_size==0
+
+TimePeriod()=>
+    Cond = time>Start_time
+    Cond := Cond and time<End_Time
+    Cond
+
+if (ActiveTrade and TimePeriod())
+    SLL = 0.0 
+    SLS = 0.0
+    TPL = 0.0
+    TPS = 0.0
+// =================================================================================================Long Trade
+    if (BCond and NOn)
+        TPL := close+TPM*(math.abs(close-Ema))
+        SLL := (1-Percent/100)*close
+        strategy.entry('Long', strategy.long,alert_message = 'Enter Long:\nSL Price'+str.tostring(SLL))
+    if LOn
+        TPL := TPL[1]
+        SLL := SLL[1]
+    strategy.exit('Exit Long','Long',stop = SLL,limit = TPL,alert_message = 'Close Long Position')
+// =================================================================================================Short Trade
+    if (SCond and NOn)
+        TPS := close-TPM*(math.abs(close-Ema))
+        SLS := (1+Percent/100)*close
+        strategy.entry('Short', strategy.short,alert_message = 'Enter Short:\nSL Price'+str.tostring(SLS))
+    if SOn
+        TPS := TPS[1]
+        SLS := SLS[1]
+    strategy.exit('Exit','Short',stop = SLS,limit =TPS,alert_message = 'Close Short Position')
+// =================================================================================================Leverage Implementation
+avgGrossProfit(val) =>
+    strategy.closedtrades.profit(val)-strategy.closedtrades.commission(val)
+if ActiveTrade 
+    EquityVal = strategy.initial_capital
+    EquityVal := strategy.closedtrades==1 ?
+         strategy.initial_capital*(1+Lev*avgGrossProfit(0)/strategy.initial_capital) : 
+         strategy.closedtrades>strategy.closedtrades[1] ? 
+         EquityVal[1]*(1+Lev*avgGrossProfit(strategy.closedtrades-1)/EquityVal[1]):EquityVal[1]
+    Profit = 100*(EquityVal-strategy.initial_capital)/strategy.initial_capital
+    Labels = array.new_label(0)
+    if barstate.islastconfirmedhistory
+        if array.size(Labels)>1
+            label.delete(array.get(Labels,0))
+        Labels.push(label.new(x=bar_index+5,y=hl2,text='Profit : '+str.tostring(Profit)+'%',color = color.black,textcolor = color.white))

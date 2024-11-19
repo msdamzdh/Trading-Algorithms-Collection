@@ -1,0 +1,72 @@
+// This source code is subject to the terms of the Mozilla Public License 2.0 at https://mozilla.org/MPL/2.0/
+// © aminmasood54
+
+//@version=5
+strategy("My script")
+len = input(10,title = 'Length')
+sample = array.new<float>(len,0)
+AST = input.bool(defval = true,title = 'Short')
+ALT = input.bool(defval = true,title = 'Long')
+result = ta.rma(ta.tr(true), 14)
+upper = high + result * 3
+lower = low - result * 3
+Price = ta.sma(close,9)
+h = ta.highest(Price,len)
+l = ta.lowest(Price,len)
+for i=0 to len-1
+    array.set(sample,i,(h-Price[i])/(h-l))
+
+Dist = array.new<float>(0)
+for j=len to 1000
+    val = 0.0
+    for i=0 to len-1
+        val :=val + array.get(sample,i)-(h[j]-Price[j+i])/(h[j]-l[j])/len
+    array.push(Dist,val)
+
+minD = array.min(Dist)
+index = array.indexof(Dist,minD)
+Index = index+len
+plot(minD)
+BCond = false
+SCond = false
+if Index<1000
+    for i=Index to 0
+        if high[i]>upper[Index] and low[i]>lower[Index]
+            SCond :=true and minD<3
+            break
+        else if high[i]<upper[Index] and low[i]<lower[Index]
+            BCond :=true and minD<3
+            break
+ActiveTrade = (BCond or SCond) or (strategy.position_size!=0)
+// ====================
+if (ActiveTrade)
+    // if strategy.position_size>0 and SCond
+    //     strategy.close('LE')
+    // if strategy.position_size<0 and BCond
+    //     strategy.close('SE')
+    if AST
+        SE = strategy.position_size==0 and SCond
+        TPS=0.0
+        SLS=0.0
+        SIndex = 0
+        if SE
+            strategy.entry("SE",strategy.short)
+            TPS:=lower
+            SLS:=upper
+        else
+            TPS:=TPS[1]
+            SLS:=SLS[1]
+        strategy.exit("EXSE","SE",stop = SLS,limit = TPS)
+    if ALT
+        LE = strategy.position_size==0 and BCond
+        TPL=0.0
+        SLL=0.0
+        LIndex = 0
+        if LE
+            strategy.entry("LE",strategy.long)
+            TPL:=upper
+            SLL:=lower
+        else
+            TPL:=TPL[1]
+            SLL:=SLL[1]
+        strategy.exit("EXLE","LE",stop = SLL,limit = TPL)

@@ -1,0 +1,99 @@
+// This source code is subject to the terms of the Mozilla Public License 2.0 at https://mozilla.org/MPL/2.0/
+// © aminmasood54
+
+//@version=5
+strategy("Relative Pivot",
+         default_qty_type = strategy.percent_of_equity,default_qty_value = 100,
+         commission_type = strategy.commission.percent,commission_value = 0.02)
+Len1 = input.int(60,'Len1',step = 5)
+Len2 = input.int(50,'Len2',step = 5)
+
+H1 = ta.pivothigh(high,Len1,Len1)
+L1 = ta.pivotlow(low,Len1,Len1)
+
+h1 = ta.valuewhen(na(H1)==false,H1,0)
+indh1 = ta.valuewhen(na(H1)==false,bar_index[Len1],0)
+l1 = ta.valuewhen(na(L1)==false,L1,0)
+indl1 = ta.valuewhen(na(L1)==false,bar_index[Len1],0)
+
+A = (h1-l1)/(indh1-indl1)
+plot(A,color=color.green)
+
+H2 = ta.pivothigh(high,Len2,Len2)
+L2 = ta.pivotlow(low,Len2,Len2)
+
+h2 = ta.valuewhen(na(H2)==false,H2,0)
+indh2 = ta.valuewhen(na(H2)==false,bar_index[Len2],0)
+l2 = ta.valuewhen(na(L2)==false,L2,0)
+indl2 = ta.valuewhen(na(L2)==false,bar_index[Len2],0)
+
+B = (h2-l2)/(indh2-indl2)
+
+plot(B,color=color.red)
+// ====================
+TPP = input.float(defval = 100,title = 'TPP',step = 0.1)
+SLP = input.float(defval = 100,title = 'SLP',step = 0.1)
+TradeLong = input.bool(false,'TradeLong')
+TradeShort = input.bool(false,'TradeShort')
+SW = input.bool(false,'SwitchCond')
+LCond = TradeLong and ta.crossover(A,B)
+SCond = TradeShort and ta.crossunder(A,B)
+LClose = false
+SClose = false
+if SW
+    a = LCond
+    LCond := SCond
+    SCond := a
+    b = SClose
+    SClose := LClose
+    LClose := b
+bgcolor(color = LCond?color.new(color.green,60):SCond?color.new(color.red,60):na)
+SLL = 0.0
+SLS = 0.0
+TPL = 0.0
+TPS = 0.0
+if LCond
+    strategy.entry('Long',strategy.long)
+    SLL := close*(1-SLP/100)
+    TPL := close*(1+TPP/100)
+if strategy.position_size>0
+    SLL := SLL[1]
+    TPL := TPL[1]
+if SCond
+    strategy.entry('Short',strategy.short)
+    SLS := close*(1+SLP/100)
+    TPS := close*(1-TPP/100)
+if strategy.position_size<0
+    SLS := SLS[1]
+    TPS := TPS[1]
+if LClose
+    strategy.close('Long')
+if SClose
+    strategy.close('Short')
+strategy.exit('ExL','Long',limit = TPL,stop = SLL)
+strategy.exit('ExS','Short',limit = TPS,stop = SLS)
+
+Lev = input.int(defval=10,title='Levrage')
+commision = input.float(defval=0.02,title='Commision %')
+avgGrossProfit(val) =>
+    Profit = 0.0
+    if strategy.closedtrades.size(val)>0
+        Profit := 100*(strategy.closedtrades.exit_price(val)-strategy.closedtrades.entry_price(val))/strategy.closedtrades.entry_price(val)
+    else
+        Profit :=100*(-strategy.closedtrades.exit_price(val)+strategy.closedtrades.entry_price(val))/strategy.closedtrades.entry_price(val)
+    Profit :=  Profit - 2*commision
+PrfPT = avgGrossProfit(strategy.closedtrades-1)
+EquityVal=1.0
+if strategy.closedtrades==0
+    EquityVal:=1
+else
+    if strategy.closedtrades>strategy.closedtrades[1]
+        EquityVal:=(1+Lev*PrfPT/100)*EquityVal[1]
+    else
+        EquityVal:=EquityVal[1]
+var testTable = table.new(position = position.top_right, columns = 2, rows = 1, bgcolor = color.yellow, border_width = 1)
+if barstate.isconfirmed
+    table.cell(table_id = testTable, column = 0, row = 0, text = "Profit is ")
+    table.cell(table_id = testTable, column = 1, row = 0, text = str.tostring((EquityVal-1)*100)+'%', bgcolor=color.teal)
+
+

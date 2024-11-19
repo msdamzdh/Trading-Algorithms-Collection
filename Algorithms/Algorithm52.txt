@@ -1,0 +1,136 @@
+// This source code is subject to the terms of the Mozilla Public License 2.0 at https://mozilla.org/MPL/2.0/
+// © aminmasood54
+
+//@version=5
+strategy("Polynomial+QQE",overlay=true)
+import aminmasood54/Polynomial3/2 as PR
+AST = input.bool(true,title = 'Short',group = 'Trade')
+ALT = input.bool(true,title = 'Long',group = 'Trade')
+TRSL = input.bool(false,title = 'TrailingSL',group = 'Trade')
+// ===============================================Data
+Start_time = input.time(timestamp("1 Jan 2020 00:00 +0000"), "Start Date")
+// =============================================
+BLen = input.int(2,title = 'Back length',group = 'Poly',minval = 2)
+Step = input.int(1,title = 'Step',group = 'Poly',minval = 1)
+DOP = input.int(8,title = 'Degree of polynomial',group = 'Poly')
+// ===============================================
+ALen = input.int(14,title = 'Atr length',group = 'ATR')
+AmT = input.float(2,title = 'TP Atr multiplier',group = 'ATR',step = 0.5)
+result = ta.rma(ta.tr(true), 14)
+upper = high + result * AmT
+lower = low - result * AmT
+// ===============================================
+ConsiderError = input.bool(defval = false,title = 'Consider Error',group = 'Error')
+MaximumError = input.float(defval = 0.01,title = 'Maximum Error',minval = 0.01,maxval = 2,step = 0.01,group = 'Error')
+//===================================================
+error = array.new<float>(DOP)
+length = BLen+Step*DOP+1
+[Y,Error] = PR.PolyNomial(Dop = DOP,n = length,nonp = 1)
+maxVal = matrix.max(Y)
+minVal = matrix.min(Y)
+// =====================QQE
+RSI_Period = input(14, title='RSI Length')
+SF = input(5, title='RSI Smoothing')
+QQE = input(4.238, title='Fast QQE Factor')
+ThreshHold = input(10, title='Thresh-hold')
+
+src = close
+Wilders_Period = RSI_Period * 2 - 1
+
+Rsi = ta.rsi(src, RSI_Period)
+RsiMa = ta.ema(Rsi, SF)
+AtrRsi = math.abs(RsiMa[1] - RsiMa)
+MaAtrRsi = ta.ema(AtrRsi, Wilders_Period)
+dar = ta.ema(MaAtrRsi, Wilders_Period) * QQE
+
+longband = 0.0
+shortband = 0.0
+trend = 0
+
+DeltaFastAtrRsi = dar
+RSIndex = RsiMa
+newshortband = RSIndex + DeltaFastAtrRsi
+newlongband = RSIndex - DeltaFastAtrRsi
+longband := RSIndex[1] > longband[1] and RSIndex > longband[1] ? math.max(longband[1], newlongband) : newlongband
+shortband := RSIndex[1] < shortband[1] and RSIndex < shortband[1] ? math.min(shortband[1], newshortband) : newshortband
+cross_1 = ta.cross(longband[1], RSIndex)
+trend := ta.cross(RSIndex, shortband[1]) ? 1 : cross_1 ? -1 : nz(trend[1], 1)
+FastAtrRsiTL = trend == 1 ? longband : shortband
+
+// Find all the QQE Crosses
+
+QQExlong = 0
+QQExlong := nz(QQExlong[1])
+QQExshort = 0
+QQExshort := nz(QQExshort[1])
+QQExlong := FastAtrRsiTL < RSIndex ? QQExlong + 1 : 0
+QQExshort := FastAtrRsiTL > RSIndex ? QQExshort + 1 : 0
+
+//Conditions
+
+qqeLong = QQExlong == 1 ? FastAtrRsiTL[1] - 50 : na
+qqeShort = QQExshort == 1 ? FastAtrRsiTL[1] - 50 : na
+// ========================================Operations
+BCond = maxVal>upper and qqeLong
+SCond = minVal<lower and qqeShort
+bgcolor(color = BCond?color.new(color.green,60):SCond?color.new(color.red,60):na)
+// ================================
+TCond = (SCond or BCond) or (strategy.position_size!=0)
+PCond = time>Start_time
+ActiveTrade = TCond and PCond
+TP = 0.0
+SL = 0.0
+EP = 0.0
+// ====================
+LEON = strategy.position_size>0
+LE = strategy.position_size==0 and BCond
+if (LE and ALT)
+    strategy.entry("LE",strategy.long)
+    TP:=upper
+    SL:=lower
+    EP:=close
+if LEON
+    TP:=TP[1]
+    SL:=SL[1]
+    EP:=EP[1]
+if TRSL
+    if (high>TP and low>SL and lower>EP)
+        TP:=upper
+        SL:=lower
+        EP:=close
+    else if (high>TP and low<SL) or (high<TP and low<SL) or (high>TP and low>SL and lower<EP)
+        strategy.close('LE')
+else
+    if (high>TP and low>SL) or (high<TP and low<SL) or (high<TP and low<SL)
+        strategy.close('LE')
+// =================================
+SEON = strategy.position_size<0
+SE = strategy.position_size==0 and SCond
+if (SE and AST)
+    strategy.entry("SE",strategy.short)
+    TP:=lower
+    SL:=upper
+    EP:=close
+if SEON
+    TP:=TP[1]
+    SL:=SL[1]
+    EP:=EP[1]
+if TRSL
+    if (low<TP and high<SL and upper<EP)
+        TP:=lower
+        SL:=upper
+        EP:=close
+    else if (low<TP and high>SL) or (low>TP and high>SL) or (low<TP and high<SL and upper>EP)
+        strategy.close('SE')
+else
+    if (low<TP and high<SL) or (low<TP and high>SL) or (low>TP and high>SL)
+        strategy.close('SE')
+// =================================
+plot(TP,color=color.green)
+plot(SL,color=color.red)
+
+
+
+
+
+

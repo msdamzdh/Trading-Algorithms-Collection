@@ -1,0 +1,112 @@
+// This source code is subject to the terms of the Mozilla Public License 2.0 at https://mozilla.org/MPL/2.0/
+// © aminmasood54
+
+//@version=5
+strategy("Poly Regression",overlay=true)
+import aminmasood54/Polynomial3/4 as PR
+
+DOP1 = input.int(defval=3,title = 'Degree1')
+DOP2 = input.int(defval=5,title = 'Degree2')
+N = input.int(defval=100,title = 'Number of data',step = 5)
+
+[p1,e1] = PR.PolyNomial(DOP1,N,1,close)
+[p2,e2] = PR.PolyNomial(DOP2,N,1,close)
+Price1 = matrix.get(p1,0,0)
+Price2 = matrix.get(p2,0,0)
+plot(Price1)
+plot(Price2,color = color.red)
+// =============================
+upperBandSource = input(high, title='Upper Band Source')
+lowerBandSource = input(low, title='Lower Band Source')
+length = input.int(14, minval=1, title='Period')
+multiplier = input.float(2, minval=0.1, step=0.1, title='Multiplier')
+smoothing = input.string(title='Smoothing', defval='RMA', options=['RMA', 'SMA', 'EMA', 'WMA'])
+
+ma_function(source, length) =>
+    if smoothing == 'RMA'
+        ta.rma(source, length)
+    else
+        if smoothing == 'SMA'
+            ta.sma(source, length)
+        else
+            if smoothing == 'EMA'
+                ta.ema(source, length)
+            else
+                ta.wma(source, length)
+
+atr =ta.tr(true)
+[Atr,e3] = PR.PolyNomial(DOP1,N,1,atr)
+upper = Price1 + matrix.get(Atr,0,0) * multiplier
+lower = Price1 - matrix.get(Atr,0,0) * multiplier
+
+plot(upper, color=color.new(color.silver, 0), linewidth=3, style=plot.style_stepline, title='Upper')
+plot(lower, color=color.new(color.silver, 0), linewidth=3, style=plot.style_stepline, title='Lower')
+// ============================================
+
+LCond = ta.crossover(Price2,Price1) and close>Price2
+SCond = ta.crossover(Price1,Price2) and close<Price2
+
+TPL = 0.0
+SLL = 0.0
+TPS = 0.0
+SSL = 0.0
+CL = 0.0
+CS = 0.0
+LEON = strategy.position_size>0
+SEON = strategy.position_size<0
+
+if LCond
+    strategy.entry('Long',strategy.long)
+    TPL := upper
+    CL := close
+if LEON
+    TPL := TPL[1]
+    CL := TPL[1]
+
+if SCond
+    strategy.entry('Short',strategy.short)
+    TPS := lower
+    CS := close
+if SEON
+    TPS := TPS[1]
+    CS := CS[1]
+
+// if LEON and ta.crossover(Price1,Price2)
+//     strategy.close('Long')
+// if SEON and ta.crossover(Price2,Price1)
+//     strategy.close('Short')
+// if LEON and close>TPL
+//     SLL :=TPL
+//     TPL := upper
+//     CL := close
+// if SEON and close<TPS
+//     SSL := TPS
+//     TPS := lower
+//     CS := close
+
+// if SLL!=0
+//     strategy.exit('ExitL','Long',stop = SLL)
+// if SSL!=0
+//     strategy.exit('ExitS','Short',stop = SSL)
+// LCont = LEON and close>TPL and close[1]<TPL
+// SCont = SEON and close<TPS and close[1]>TPS
+
+// if LCont
+//     SLL := TPL
+//     TPL := upper
+
+// if SCont
+//     SSL := TPS
+//     TPS := lower
+
+// if LEON and close<SLL and SLL!=0
+//     strategy.close('Long')
+// if SEON and close>SSL and SSL!=0
+//     strategy.close('Short')
+
+LExit = strategy.position_size>0 and ta.crossunder(Price1,Price2)
+SExit = strategy.position_size<0 and ta.crossover(Price1,Price2)
+// if LExit
+//     strategy.close('Long')
+// if SExit
+//     strategy.close('Short')

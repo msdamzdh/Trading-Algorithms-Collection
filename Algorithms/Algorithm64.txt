@@ -1,0 +1,42 @@
+// This source code is subject to the terms of the Mozilla Public License 2.0 at https://mozilla.org/MPL/2.0/
+// © aminmasood54
+
+//@version=5
+strategy("Renko strategy+Atr",overlay = true,initial_capital=195,
+     default_qty_type=strategy.percent_of_equity,default_qty_value=100,
+     commission_type=strategy.commission.percent,commission_value=0.02)
+
+Length = input.int(defval = 10,title = 'Length',step = 1)
+BigLength = input.int(defval = 100,title = 'Big Length',step = 1)
+ATRM = input.int(defval = 2,title = 'ATRM',step = 1)
+
+up = 0.0
+down = 0.0
+Atr = ta.atr(Length)
+Cond = bar_index%BigLength==0
+BoxSize = 0.0
+if (Cond)
+    BoxSize := Atr*ATRM
+    a = math.floor(close/BoxSize)
+    if a>=1
+        up := a*BoxSize
+        down := (a-1)*BoxSize
+    else
+        up := BoxSize
+        down := 0.0
+else
+    BoxSize := BoxSize[1]
+    up := close>(up[1]+BoxSize)? up[1]+BoxSize:close<(down[1]-BoxSize)?up[1]-BoxSize:up[1]
+    down :=up-BoxSize
+    
+
+plot(up)
+plot(down)
+
+// // ==============================
+BCond = up>up[1]
+SCond = up<up[1]
+if BCond
+    strategy.entry('Long',strategy.long)
+if SCond
+    strategy.entry('Short',strategy.short)

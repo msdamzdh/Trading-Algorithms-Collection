@@ -1,0 +1,25 @@
+//@version=4
+strategy("Price Action Trading Strategy", overlay=true)
+
+// Define input variables
+fastMA = input(title="Fast MA Period", type=input.integer, defval=10)
+slowMA = input(title="Slow MA Period", type=input.integer, defval=20)
+
+// Calculate moving averages
+fast = sma(close, fastMA)
+slow = sma(close, slowMA)
+
+// Determine bullish or bearish trend
+trend = fast > slow ? 1 : -1
+
+// Buy signal: Price crosses above the slow MA during an uptrend
+buySignal = crossover(close, slow) and trend == 1
+
+// Sell signal: Price crosses below the slow MA during a downtrend
+sellSignal = crossunder(close, slow) and trend == -1
+
+// Execute trades based on signals
+if (buySignal)
+    strategy.entry("Buy", strategy.long)
+if (sellSignal)
+    strategy.entry("Sell", strategy.short)

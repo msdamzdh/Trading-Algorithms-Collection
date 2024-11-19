@@ -1,0 +1,111 @@
+import TradingView/ta/5
+
+// This source code is subject to the terms of the Mozilla Public License 2.0 at https://mozilla.org/MPL/2.0/
+// © aminmasood54
+
+//@version=5
+strategy("VolumeProfile",overlay = true,
+         default_qty_type = strategy.percent_of_equity,default_qty_value = 100,
+         commission_type = strategy.commission.percent,commission_value = 0.02)
+Length = input.int(defval = 96,title = 'Length',step = 1)
+Nor = input.int(defval = 5,title = 'Number of range',step=1,minval = 3)
+ShowPivot = input.bool(defval = false,title = 'ShowPivot?')
+setRange(H,L,Nor)=>
+    Range = array.new<float>(Nor+1,0.0)
+    step = (H-L)/Nor
+    for i=0 to Nor
+        array.set(Range,i,L+i*step)
+    Range
+
+
+h = 0.0
+l = 0.0
+H = ta.highest(high,Length)
+L = ta.lowest(low,Length)
+VP = array.new<float>(Nor,0.0)
+Range = setRange(H,L,Nor)
+for i=0 to Length
+    for j=0 to Nor-1
+        if (close[i]>=array.get(Range,j) and close[i]<array.get(Range,j+1))
+            array.set(VP,j,array.get(VP,j)+volume[i])
+            break
+ind = array.indexof(VP,array.max(VP))
+indmi = array.indexof(VP,array.max(VP,1))
+indma = array.indexof(VP,array.max(VP,2))
+RLine = (array.get(Range,ind)+array.get(Range,ind+1))/2
+Line2 = (array.get(Range,indma)+array.get(Range,indma+1))/2
+Line3 = (array.get(Range,indmi)+array.get(Range,indmi+1))/2
+MaLine = math.max(Line2,Line3)
+MiLine = math.min(Line2,Line3)
+plot(RLine,title = 'Line1',color = color.black,offset = Length)
+plot(MaLine,title = 'Line2',color = color.red,offset = Length)
+plot(MiLine,title = 'Line3',color = color.green,offset = Length)
+
+// ==============================================================
+TPP = input.float(defval = 4,title = 'TPP',step = 0.1)
+SLP = input.float(defval = 2,title = 'SLP',step = 0.1)
+TradeLong = input.bool(false,'TradeLong')
+TradeShort = input.bool(false,'TradeShort') 
+SW = input.bool(false,'SwitchCond')
+LCond = TradeLong 
+SCond = TradeShort
+LClose = false
+SClose = false
+if SW
+    a = LCond
+    LCond := SCond
+    SCond := a
+    b = SClose
+    SClose := LClose
+    LClose := b
+bgcolor(color = LCond?color.new(color.green,60):SCond?color.new(color.red,60):na)
+SLL = 0.0
+SLS = 0.0
+TPL = 0.0
+TPS = 0.0
+if LCond
+    strategy.entry('Long',strategy.long)
+    SLL := close*(1-SLP/100)
+    TPL := close*(1+TPP/100)
+if strategy.position_size>0
+    SLL := SLL[1]
+    TPL := TPL[1]
+if SCond
+    strategy.entry('Short',strategy.short)
+    SLS := close*(1+SLP/100)
+    TPS := close*(1-TPP/100)
+if strategy.position_size<0
+    SLS := SLS[1]
+    TPS := TPS[1]
+if LClose
+    strategy.close('Long')
+if SClose
+    strategy.close('Short')
+strategy.exit('ExL','Long',limit = TPL,stop = SLL)
+strategy.exit('ExS','Short',limit = TPS,stop = SLS)
+
+Lev = input.int(defval=10,title='Levrage')
+commision = input.float(defval=0.02,title='Commision %')
+avgGrossProfit(val) =>
+    Profit = 0.0
+    if strategy.closedtrades.size(val)>0
+        Profit := 100*(strategy.closedtrades.exit_price(val)-strategy.closedtrades.entry_price(val))/strategy.closedtrades.entry_price(val)
+    else
+        Profit :=100*(-strategy.closedtrades.exit_price(val)+strategy.closedtrades.entry_price(val))/strategy.closedtrades.entry_price(val)
+    Profit :=  Profit - 2*commision
+PrfPT = avgGrossProfit(strategy.closedtrades-1)
+EquityVal=1.0
+if strategy.closedtrades==0
+    EquityVal:=1
+else
+    if strategy.closedtrades>strategy.closedtrades[1]
+        EquityVal:=(1+Lev*PrfPT/100)*EquityVal[1]
+    else
+        EquityVal:=EquityVal[1]
+var testTable = table.new(position = position.top_right, columns = 2, rows = 1, bgcolor = color.yellow, border_width = 1)
+if barstate.isconfirmed
+    table.cell(table_id = testTable, column = 0, row = 0, text = "Profit is ")
+    table.cell(table_id = testTable, column = 1, row = 0, text = str.tostring((EquityVal-1)*100)+'%', bgcolor=color.teal)
+
+
+

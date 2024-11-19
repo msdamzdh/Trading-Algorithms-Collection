@@ -1,0 +1,48 @@
+// This source code is subject to the terms of the Mozilla Public License 2.0 at https://mozilla.org/MPL/2.0/
+// © aminmasood54
+
+//@version=5
+strategy("EMACROSS_RSI2",overlay=true,
+         default_qty_type = strategy.percent_of_equity,default_qty_value = 100,
+         commission_type = strategy.commission.percent,commission_value = 0.02)
+
+RSILen = input.int(5,title='RSILen')
+RSIMALEN = input.int(5,title='RSILen')
+
+Length1 = input.int(11,title='Len1')
+Length2 = input.int(18,title='Len2')
+
+EMALen = input.int(170,title='EMALen',minval = 50)
+
+l1 = input.int(0,title='L1',maxval = 1,minval = 0)
+l2 = input.int(0,title='L2',maxval = 1,minval = 0)
+l3 = input.int(0,title='L3',maxval = 1,minval = 0)
+s1 = input.int(1,title='S1',maxval = 1,minval = 0)
+s2 = input.int(1,title='S3',maxval = 1,minval = 0)
+s3 = input.int(1,title='S3',maxval = 1,minval = 0)
+
+RSI = ta.rsi(close,RSILen)
+RSIMA = ta.sma(RSI,RSIMALEN)
+
+Line1 = ta.ema(close,Length1)
+Line2 = ta.ema(close,Length1+Length2)
+
+EMA = ta.ema(close,EMALen)
+
+Cond1Array = array.from(ta.crossover(Line1,Line2),ta.crossunder(Line1,Line2))
+Cond2Array = array.from(close>EMA,close<EMA)
+Cond3Array = array.from(RSI>RSIMA,RSI<RSIMA)
+
+LCond = array.get(Cond1Array,l1) and array.get(Cond2Array,l2) and array.get(Cond3Array,l3)
+SCond = array.get(Cond1Array,s1) and array.get(Cond2Array,s2) and array.get(Cond3Array,s3)
+
+if LCond
+    strategy.close('Short')
+    strategy.entry('Long',strategy.long)
+if SCond
+    strategy.close('Long')
+    strategy.entry('Short',strategy.short)
+
+plot(Line1, title="Line1", color=#2962FF,linewidth = 2)
+plot(Line2, title="Line2", color=color.fuchsia,linewidth = 2)
+plot(EMA, title="EMA", color=color.black,linewidth = 2)

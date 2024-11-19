@@ -1,0 +1,137 @@
+//@version=5
+strategy(title='ATRC+MAC+STC', shorttitle='ATRC+MAC+STC',overlay = true,
+         default_qty_type = strategy.percent_of_equity,default_qty_value = 100,
+         commission_type = strategy.commission.percent,commission_value = 0.02)
+
+lengthAtr = input.int(14, minval=1, title='ATRLen')
+lengthMAC = input(defval=100,title = 'MACLen')
+incr   = input(10, "Increment")
+fast   = input(10)
+multiplier = input.float(2, minval=0.1, step=0.1, title='Multiplier')
+smoothing = input.string(title='Smoothing', defval='RMA', options=['RMA', 'SMA', 'EMA', 'WMA'])
+EEEEEE = input(12, 'Length')
+BBBB = input(26, 'FastLength')
+BBBBB = input(50, 'SlowLength')
+M = input.int(defval = 2,title = 'R')
+start_time = input.time(defval=timestamp("1 Apr 2023 00:00 +0300"),confirm = true)
+end_time = input.time(defval=timestamp("1 May 2023 00:00 +0300"),confirm = true)
+// =======================================================================================
+ma_function(source, length) =>
+    if smoothing == 'RMA'
+        ta.rma(source, length)
+    else
+        if smoothing == 'SMA'
+            ta.sma(source, length)
+        else
+            if smoothing == 'EMA'
+                ta.ema(source, length)
+            else
+                ta.wma(source, length)
+
+result = ma_function(ta.tr(true), lengthAtr)
+upper = high + result * multiplier
+lower = low - result * multiplier
+
+var ma    = 0.
+var fma   = 0.
+var alpha = 0.
+var k     = 1 / incr
+upperMAC = ta.highest(lengthMAC)
+lowerMAC = ta.lowest(lengthMAC)
+init_ma = ta.sma(close, lengthMAC)
+cross = ta.cross(close,ma)
+alpha := cross ? 2 / (lengthMAC + 1): close > ma and upperMAC > upperMAC[1] ? alpha + k: close < ma and lowerMAC < lowerMAC[1] ? alpha + k: alpha
+ma := nz(ma[1] + alpha[1] * (close - ma[1]), init_ma)
+fma := nz(cross ? math.avg(close, fma[1]): close > ma ? math.max(close, fma[1]) + (close - fma[1]) / fast: math.min(close, fma[1]) + (close - fma[1]) / fast,close)
+
+AAAA(BBB, BBBB, BBBBB) =>
+    fastMA = ta.ema(BBB, BBBB)
+    slowMA = ta.ema(BBB, BBBBB)
+    AAAA = fastMA - slowMA
+    AAAA
+
+AAAAA(EEEEEE, BBBB, BBBBB) =>
+    AAA = input(0.5)
+    var CCCCC = 0.0
+    var DDD = 0.0
+    var DDDDDD = 0.0
+    var EEEEE = 0.0
+    BBBBBB = AAAA(close, BBBB, BBBBB)
+    CCC = ta.lowest(BBBBBB, EEEEEE)
+    CCCC = ta.highest(BBBBBB, EEEEEE) - CCC
+    CCCCC := CCCC > 0 ? (BBBBBB - CCC) / CCCC * 100 : nz(CCCCC[1])
+    DDD := na(DDD[1]) ? CCCCC : DDD[1] + AAA * (CCCCC - DDD[1])
+    DDDD = ta.lowest(DDD, EEEEEE)
+    DDDDD = ta.highest(DDD, EEEEEE) - DDDD
+    DDDDDD := DDDDD > 0 ? (DDD - DDDD) / DDDDD * 100 : nz(DDDDDD[1])
+    EEEEE := na(EEEEE[1]) ? DDDDDD : EEEEE[1] + AAA * (DDDDDD - EEEEE[1])
+    EEEEE
+mAAAAA = AAAAA(EEEEEE, BBBB, BBBBB)
+
+
+//-----------------------------------------------------------------------------}
+//Plots
+css = fma > ma ? color.teal : color.red
+plot0 = plot(fma, "Fast MA" , color = color.new(#ff5d00,100))
+plot1 = plot(ma, "Converging MA", color = css)
+fill(plot0, plot1, color.new(css,80), "Fill")
+plot(upper, color=color.new(color.black, 0), linewidth=2, style=plot.style_stepline, title='Upper')
+plot(lower, color=color.new(color.black, 0), linewidth=2, style=plot.style_stepline, title='Lower')
+//-----------------------------------------------------------------------------}
+LCond = mAAAAA > mAAAAA[1] and mAAAAA[1]<25 and fma > ma
+SCond = mAAAAA < mAAAAA[1] and mAAAAA[1]>75 and fma < ma
+LEON = strategy.position_size>0
+SEON = strategy.position_size<0
+SLL = 0.0
+SLS = 0.0
+TPL = 0.0
+TPS = 0.0
+TimeCond= time>=start_time and time<=end_time
+if LCond and TimeCond
+    strategy.entry('Long',strategy.long)
+    R = close-lower
+    SLL := lower
+    TPL := close+M*R
+if LEON
+    SLL := SLL[1]
+    TPL := TPL[1]
+if TimeCond==false and LEON
+    strategy.close('Long')
+if SCond and TimeCond
+    strategy.entry('Short',strategy.short)
+    R = upper-close
+    SLS := upper
+    TPS :=close-M*R
+if SEON
+    SLS := SLS[1]
+    TPS := TPS[1]
+if TimeCond==false and SEON
+    strategy.close('Short')
+
+strategy.exit('ExL','Long',stop = SLL,limit = TPL)
+strategy.exit('ExS','Short',stop = SLS,limit = TPS)
+// ===========================================================================================================================================================
+Lev = input.int(defval=10,title='Levrage')
+commision = input.float(defval=0.02,title='Commision %')
+avgGrossProfit(val) =>
+    Profit = 0.0
+    if strategy.closedtrades.size(val)>0
+        Profit := 100*(strategy.closedtrades.exit_price(val)-strategy.closedtrades.entry_price(val))/strategy.closedtrades.entry_price(val)
+    else
+        Profit :=100*(-strategy.closedtrades.exit_price(val)+strategy.closedtrades.entry_price(val))/strategy.closedtrades.entry_price(val)
+    Profit :=  Profit - 2*commision
+PrfPT = avgGrossProfit(strategy.closedtrades-1)
+EquityVal=1.0
+if strategy.closedtrades==0
+    EquityVal:=1
+else
+    if strategy.closedtrades>strategy.closedtrades[1]
+        EquityVal:=(1+Lev*PrfPT/100)*EquityVal[1]
+    else
+        EquityVal:=EquityVal[1]
+var testTable = table.new(position = position.top_right, columns = 2, rows = 1, bgcolor = color.yellow, border_width = 1)
+if barstate.isconfirmed
+    table.cell(table_id = testTable, column = 0, row = 0, text = "Profit is ")
+    table.cell(table_id = testTable, column = 1, row = 0, text = str.tostring((EquityVal-1)*100)+'%', bgcolor=color.teal)
+// ===========================================================================================================================================================
+

@@ -1,0 +1,23 @@
+//@version=5
+strategy(title="Parabolic SAR", shorttitle="SAR", overlay=true)
+start = input(0.02)
+increment = input(0.02)
+maximum = input(0.2, "Max Value")
+out = ta.sar(start, increment, maximum)
+len = input.int(200,title = 'EMA Length')
+EMA = ta.ema(close,len)
+
+LE = out<low and out[1]>high[1] and close>EMA and strategy.position_size==0
+SE = out[1]<low[1] and out>high and close<EMA and strategy.position_size==0
+EXLE = strategy.position_size>0 and out[1]<low[1] and out>high
+EXSE = strategy.position_size<0 and out<low and out[1]>high[1]
+if LE
+    strategy.entry('LE',strategy.long)
+if  EXLE
+    strategy.close('LE')
+if SE
+    strategy.entry('SE',strategy.short)
+if EXSE
+    strategy.close('SE')
+
+plot(out, "ParabolicSAR", style=plot.style_cross, color=#2962FF)

@@ -1,0 +1,103 @@
+import TradingView/ta/5
+
+// This source code is subject to the terms of the Mozilla Public License 2.0 at https://mozilla.org/MPL/2.0/
+// © aminmasood54
+
+//@version=5
+strategy("CBPAL",
+         default_qty_type = strategy.percent_of_equity,default_qty_value = 100,
+         commission_type = strategy.commission.percent,commission_value = 0.02,precision=5)
+
+Step = input.int(defval = 10,title = 'Step',step = 5)
+NOS = input.int(defval = 65,title = 'Number of Sample',step = 5)
+MALen1 = input.int(defval = 10,title = 'MA Len1',step = 5)
+MALen2 = input.int(defval = 20,title = 'MA Len2',step = 5)
+
+ETrh = input.int(defval = 0,title = 'Entry treshold level',step = 1)
+Percent = input.float(defval = 1.5,title = 'SL Percent',step = 0.1)
+SwitchCond = input.bool(defval = false,title = 'Switch Condition?')
+
+Pear = array.new<float>(NOS,0)
+X = bar_index
+Y = close
+X2 = math.pow(X,2)
+Y2 = math.pow(Y,2)
+N = NOS*(NOS-1)/2
+pavg = 0.0
+navg = 0.0
+cp = 0
+cn = 0
+for counter=0 to NOS-1
+    i = (counter+1)*Step
+    SX = math.sum(X,i)
+    SY = math.sum(Y,i)
+    SX2 = math.sum(X2,i)
+    SY2 = math.sum(Y2,i)
+    SXY = math.sum(X*Y,i)
+    STD = ta.stdev(hl2,i,0)
+    mavol = math.sum(volume,i)/i
+    Slope = (i*SXY-SX*SY)/(i*SX2-math.pow(SX,2))
+    Icpt = (SY-Slope*SX)/i
+    A = i*SXY-SX*SY
+    B = i*SX2-math.pow(SX,2)
+    C = i*SY2-math.pow(SY,2)
+    pear = A/math.sqrt(B*C)
+    if pear>=0
+        pavg := pavg + pear*mavol
+    else
+        navg := navg - pear*mavol
+    array.set(Pear,counter,pear*mavol)
+ 
+Line1 = ta.ema(pavg-navg,MALen1)
+Line2 = ta.ema(Line1,MALen2)
+plot(Line1,color = color.blue,title = 'LPro',linewidth = 1)
+plot(Line2,color = color.red,title = 'SPro',linewidth = 1)
+
+lcond = ta.crossover(Line1,Line2)
+scond = ta.crossover(Line2,Line1)
+// ======================================
+LCond = lcond
+SCond = scond
+if SwitchCond
+    a = LCond
+    LCond := SCond
+    SCond := a
+SLL = 0.0
+SLS = 0.0
+if LCond
+    strategy.entry('Long',strategy.long)
+    SLL := close*(1-Percent/100)
+if strategy.position_size>0
+    SLL := SLL[1]
+if SCond
+    strategy.entry('Short',strategy.short)
+    SLS := close*(1+Percent/100)
+if strategy.position_size<0
+    SLS := SLS[1]
+
+
+strategy.exit('ExL','Long',stop = SLL)
+strategy.exit('ExS','Short',stop = SLS)
+Lev = input.int(defval=10,title='Levrage')
+commision = input.float(defval=0.02,title='Commision %')
+avgGrossProfit(val) =>
+    Profit = 0.0
+    if strategy.closedtrades.size(val)>0
+        Profit := 100*(strategy.closedtrades.exit_price(val)-strategy.closedtrades.entry_price(val))/strategy.closedtrades.entry_price(val)
+    else
+        Profit :=100*(-strategy.closedtrades.exit_price(val)+strategy.closedtrades.entry_price(val))/strategy.closedtrades.entry_price(val)
+    Profit :=  Profit - 2*commision
+PrfPT = avgGrossProfit(strategy.closedtrades-1)
+EquityVal=1.0
+if strategy.closedtrades==0
+    EquityVal:=1
+else
+    if strategy.closedtrades>strategy.closedtrades[1]
+        EquityVal:=(1+Lev*PrfPT/100)*EquityVal[1]
+    else
+        EquityVal:=EquityVal[1]
+var testTable = table.new(position = position.top_right, columns = 2, rows = 1, bgcolor = color.yellow, border_width = 1)
+if barstate.isconfirmed
+    table.cell(table_id = testTable, column = 0, row = 0, text = "Profit is ")
+    table.cell(table_id = testTable, column = 1, row = 0, text = str.tostring((EquityVal-1)*100)+'%', bgcolor=color.teal)
+// ===========================================================================================================================================================

@@ -1,0 +1,61 @@
+// This source code is subject to the terms of the Mozilla Public License 2.0 at https://mozilla.org/MPL/2.0/
+// © aminmasood54
+
+//@version=5
+strategy("Poly Regression",overlay=true,
+         default_qty_type = strategy.percent_of_equity,default_qty_value = 100,
+         commission_type = strategy.commission.percent,commission_value = 0.02)
+import aminmasood54/Polynomial3/4 as PR
+
+Start_time = input.time(timestamp("20 Jul 2010 00:00 +0300"), "Star_time",confirm = true)
+End_time = input.time(timestamp("20 Jul 9999 00:00 +0300"), "End_time",confirm = true)
+
+DOP1 = input.int(defval=3,title = 'Degree1')
+PLDP = input.int(defval=2,title = 'Degree2')
+N = input.int(defval=100,title = 'Number of data',step = 5)
+DOP2 = DOP1+PLDP
+[p1,e1] = PR.PolyNomial(DOP1,N,1,close)
+[p2,e2] = PR.PolyNomial(DOP2,N,1,close)
+
+Price1 = matrix.get(p1,0,0)
+Price2 = matrix.get(p2,0,0)
+
+plot(Price1)
+plot(Price2,color = color.red)
+
+
+LCond = ta.crossover(Price2,Price1) and close>ta.ema(close,200)
+SCond = ta.crossover(Price1,Price2) and close<ta.ema(close,200)
+LExit = strategy.position_size>0 and ta.crossunder(Price1,Price2)
+SExit = strategy.position_size<0 and ta.crossover(Price1,Price2)
+TimeCond()=>
+    time<=End_time and time>=Start_time
+
+if LCond and TimeCond()
+    strategy.entry('Long',strategy.long)
+if SCond and TimeCond()
+    strategy.entry('Short',strategy.short)
+
+// ====================
+Lev = input.int(defval=10,title='Levrage')
+commision = input.float(defval=0.02,title='Commision %')
+avgGrossProfit(val) =>
+    Profit = 0.0
+    if strategy.closedtrades.size(val)>0
+        Profit := 100*(strategy.closedtrades.exit_price(val)-strategy.closedtrades.entry_price(val))/strategy.closedtrades.entry_price(val)
+    else
+        Profit :=100*(-strategy.closedtrades.exit_price(val)+strategy.closedtrades.entry_price(val))/strategy.closedtrades.entry_price(val)
+    Profit :=  Profit - 2*commision
+PrfPT = avgGrossProfit(strategy.closedtrades-1)
+EquityVal=1.0
+if strategy.closedtrades==0
+    EquityVal:=1
+else
+    if strategy.closedtrades>strategy.closedtrades[1]
+        EquityVal:=(1+Lev*PrfPT/100)*EquityVal[1]
+    else
+        EquityVal:=EquityVal[1]
+var testTable = table.new(position = position.top_right, columns = 2, rows = 1, bgcolor = color.yellow, border_width = 1)
+if barstate.isconfirmed
+    table.cell(table_id = testTable, column = 0, row = 0, text = "Profit is ")
+    table.cell(table_id = testTable, column = 1, row = 0, text = str.tostring((EquityVal-1)*100)+'%', bgcolor=color.teal)

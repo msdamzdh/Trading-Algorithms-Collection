@@ -1,0 +1,51 @@
+// This source code is subject to the terms of the Mozilla Public License 2.0 at https://mozilla.org/MPL/2.0/
+// © aminmasood54
+
+//@version=5
+strategy("PFP", overlay=false,
+         default_qty_type = strategy.percent_of_equity,default_qty_value = 100,
+         commission_type = strategy.commission.percent,commission_value = 0.02)
+
+Len = input.int(defval = 20,title = 'Length',step = 5)
+TLevel = input.float(0.5,title = 'TLevel',step = 0.1)
+TPP = input.float(defval = 1,title = 'TPP',step = 0.1)
+SLP = input.float(defval = 1,title = 'SLP',step = 0.1)
+
+
+H = ta.highest(high,Len)
+L = ta.lowest(low,Len)
+
+h = (H-low)/H*100
+l = (high-L)/L*100
+
+dis = h-l
+sdis = ta.ema(dis,10)
+
+SCond = dis<-TLevel and dis[1]>-TLevel
+LCond = dis>TLevel and dis[1]<TLevel[1]
+
+plot(h,color = color.red)
+plot(l,color = color.green)
+
+plot(dis,color = color.black)
+bgcolor(color=LCond?color.new(color.green,60):SCond?color.new(color.red,60):na)
+SLL = 0.0
+SLS = 0.0
+TPL = 0.0
+TPS = 0.0
+if LCond
+    strategy.entry('Long',strategy.long)
+    SLL := close*(1-SLP/100)
+    TPL := close*(1+TPP/100)
+if strategy.position_size>0
+    SLL := SLL[1]
+    TPL := TPL[1]
+if SCond
+    strategy.entry('Short',strategy.short)
+    SLS := close*(1+SLP/100)
+    TPS := close*(1-TPP/100)
+if strategy.position_size<0
+    SLS := SLS[1]
+    TPS := TPS[1]
+strategy.exit('ExL','Long',limit = TPL,stop = SLL)
+strategy.exit('ExS','Short',limit = TPS,stop = SLS)

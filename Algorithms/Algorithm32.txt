@@ -1,0 +1,106 @@
+// This source code is subject to the terms of the Mozilla Public License 2.0 at https://mozilla.org/MPL/2.0/
+// © aminmasood54
+
+//@version=5
+strategy("Normalized Price+ATR",
+         default_qty_type = strategy.percent_of_equity,default_qty_value = 100,
+         commission_type = strategy.commission.percent,commission_value = 0.02)
+Len1 = input.int(defval = 5,title = 'Length1',step = 5)
+PLen1 = input.int(defval = 10,title = 'PLen1',step = 5)
+PLen2 = input.int(defval = 15,title = 'PLen2',step = 5)
+upperBandSource = input(high, title='Upper Band Source')
+lowerBandSource = input(low, title='Lower Band Source')
+length = input.int(14, minval=1, title='Period')
+MoreCaugthion = input.bool(defval = false,title = 'More caghtion?')
+start_time = input.time(defval=timestamp("1 Apr 2023 00:00 +0300"),confirm = true)
+end_time = input.time(defval=timestamp("1 May 2023 00:00 +0300"),confirm = true)
+Percent = input.float(2, title="SL%")
+// =============================================
+EMA = ta.ema(close,Len1)
+Len2 = Len1+PLen1
+Len3 = Len2+PLen2
+Line1 = (EMA-ta.sma(EMA,Len1))/ta.stdev(EMA,Len1)
+Line2 = (EMA-ta.sma(EMA,Len2))/ta.stdev(EMA,Len2)
+Line3 = (EMA-ta.sma(EMA,Len3))/ta.stdev(EMA,Len3)
+
+multiplier = input.float(2, minval=0.1, step=0.1, title='Multiplier')
+smoothing = input.string(title='Smoothing', defval='RMA', options=['RMA', 'SMA', 'EMA', 'WMA'])
+ma_function(source, length) =>
+    if smoothing == 'RMA'
+        ta.rma(source, length)
+    else
+        if smoothing == 'SMA'
+            ta.sma(source, length)
+        else
+            if smoothing == 'EMA'
+                ta.ema(source, length)
+            else
+                ta.wma(source, length)
+
+result = ma_function(ta.tr(true), length)
+upper = upperBandSource + result * multiplier
+lower = lowerBandSource - result * multiplier
+plot(Line1,title = 'Fast')
+plot(Line2,color = color.red,title = 'Medium')
+plot(Line3,color = color.black,title = 'Slow')
+// ===========================================================
+LCond = ta.crossover(Line1,Line2)
+SCond = ta.crossover(Line2,Line1)
+if MoreCaugthion
+    LCond := LCond and Line2>Line3
+    SCond := SCond and Line2<Line3
+// ============================================
+LEON = strategy.position_size>0
+SEON = strategy.position_size<0
+NON = strategy.position_size==0
+SLL = 0.0
+SLS = 0.0
+TPL = 0.0
+TPS = 0.0
+
+TimeCond= time>=start_time and time<=end_time
+
+if LCond and TimeCond and NON
+    strategy.entry('Long',strategy.long)
+    SLL := lower
+    TPL := close+2*(close-lower)
+if LEON
+    SLL := SLL[1]
+    TPL := TPL[1]
+if TimeCond==false and LEON
+    strategy.close('Long') 
+if SCond and TimeCond and NON
+    strategy.entry('Short',strategy.short)
+    SLS := upper
+    TPS := close-2*(upper-close)
+if SEON
+    SLS := SLS[1]
+    TPS := TPS[1]
+if TimeCond==false and SEON
+    strategy.close('Short')
+strategy.exit('EL','Long',stop = SLL,limit = TPL)
+strategy.exit('ES','Short',stop = SLS,limit = TPS)
+// ===========================================================================================================================================================
+Lev = input.int(defval=10,title='Levrage')
+commision = input.float(defval=0.02,title='Commision %')
+avgGrossProfit(val) =>
+    Profit = 0.0
+    if strategy.closedtrades.size(val)>0
+        Profit := 100*(strategy.closedtrades.exit_price(val)-strategy.closedtrades.entry_price(val))/strategy.closedtrades.entry_price(val)
+    else
+        Profit :=100*(-strategy.closedtrades.exit_price(val)+strategy.closedtrades.entry_price(val))/strategy.closedtrades.entry_price(val)
+    Profit :=  Profit - 2*commision
+PrfPT = avgGrossProfit(strategy.closedtrades-1)
+EquityVal=1.0
+if strategy.closedtrades==0
+    EquityVal:=1
+else
+    if strategy.closedtrades>strategy.closedtrades[1]
+        EquityVal:=(1+Lev*PrfPT/100)*EquityVal[1]
+    else
+        EquityVal:=EquityVal[1]
+var testTable = table.new(position = position.top_right, columns = 2, rows = 1, bgcolor = color.yellow, border_width = 1)
+if barstate.isconfirmed
+    table.cell(table_id = testTable, column = 0, row = 0, text = "Profit is ")
+    table.cell(table_id = testTable, column = 1, row = 0, text = str.tostring((EquityVal-1)*100)+'%', bgcolor=color.teal)
+// ===========================================================================================================================================================

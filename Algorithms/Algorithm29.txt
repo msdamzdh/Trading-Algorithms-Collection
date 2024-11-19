@@ -1,0 +1,78 @@
+// This source code is subject to the terms of the Mozilla Public License 2.0 at https://mozilla.org/MPL/2.0/
+// © aminmasood54
+
+//@version=5
+strategy("Normalized EXP Price",
+         default_qty_type = strategy.percent_of_equity,default_qty_value = 100,
+         commission_type = strategy.commission.percent,commission_value = 0.02)
+Len1 = input.int(defval = 25,title = 'Length1',step = 5)
+PLen1 = input.int(defval = 40,title = 'PLen1',step = 5)
+PLen2 = input.int(defval = 15,title = 'PLen2',step = 5)
+start_time = input.time(defval=timestamp("1 Apr 2023 00:00 +0300"),confirm = true)
+end_time = input.time(defval=timestamp("1 May 2023 00:00 +0300"),confirm = true)
+Percent = input.float(2, title="SL%")
+// =========================================================
+EMA = ta.ema(close,Len1)
+Len2 = Len1+PLen1
+Len3 = Len2+PLen2
+Line1 = math.exp((EMA-ta.sma(EMA,Len1))/ta.stdev(EMA,Len1))
+Line2 = math.exp((EMA-ta.sma(EMA,Len2))/ta.stdev(EMA,Len2))
+Line3 = math.exp((EMA-ta.sma(EMA,Len3))/ta.stdev(EMA,Len3))
+// ========================================================
+plot(Line1)
+plot(Line2,color = color.red)
+plot(Line3,color = color.black)
+
+LCond = ta.crossover(Line1,Line2) and Line2>Line3
+SCond = ta.crossunder(Line1,Line2) and Line2<Line3
+CloseLong = ta.crossunder(Line1,Line2)
+CloseShort = ta.crossover(Line1,Line2)
+// ==========================================================================================================================================================
+// ===============================
+LEON = strategy.position_size>0
+SEON = strategy.position_size<0
+SLL = 0.0
+SLS = 0.0
+TimeCond= time>=start_time and time<=end_time
+if LCond and TimeCond
+    strategy.entry('Long',strategy.long)
+    SLL := (1-Percent/100)*close
+if LEON
+    SLL := SLL[1]
+if CloseLong or (TimeCond==false and LEON)
+    strategy.close('Long')
+if SCond and TimeCond
+    strategy.entry('Short',strategy.short)
+    SLS := (1+Percent/100)*close
+if SEON
+    SLS := SLS[1]
+if CloseShort or (TimeCond==false and SEON)
+    strategy.close('Short')
+
+strategy.exit('ExL','Long',stop = SLL)
+strategy.exit('ExS','Short',stop = SLS)
+// ===========================================================================================================================================================
+Lev = input.int(defval=10,title='Levrage')
+commision = input.float(defval=0.02,title='Commision %')
+avgGrossProfit(val) =>
+    Profit = 0.0
+    if strategy.closedtrades.size(val)>0
+        Profit := 100*(strategy.closedtrades.exit_price(val)-strategy.closedtrades.entry_price(val))/strategy.closedtrades.entry_price(val)
+    else
+        Profit :=100*(-strategy.closedtrades.exit_price(val)+strategy.closedtrades.entry_price(val))/strategy.closedtrades.entry_price(val)
+    Profit :=  Profit - 2*commision
+PrfPT = avgGrossProfit(strategy.closedtrades-1)
+EquityVal=1.0
+if strategy.closedtrades==0
+    EquityVal:=1
+else
+    if strategy.closedtrades>strategy.closedtrades[1]
+        EquityVal:=(1+Lev*PrfPT/100)*EquityVal[1]
+    else
+        EquityVal:=EquityVal[1]
+var testTable = table.new(position = position.top_right, columns = 2, rows = 1, bgcolor = color.yellow, border_width = 1)
+if barstate.isconfirmed
+    table.cell(table_id = testTable, column = 0, row = 0, text = "Profit is ")
+    table.cell(table_id = testTable, column = 1, row = 0, text = str.tostring((EquityVal-1)*100)+'%', bgcolor=color.teal)
+// ===========================================================================================================================================================
+

@@ -1,0 +1,115 @@
+// This source code is subject to the terms of the Mozilla Public License 2.0 at https://mozilla.org/MPL/2.0/
+// © aminmasood54
+
+//@version=5
+strategy("My script")
+AST = input.bool(defval = true,title = 'Short')
+ALT = input.bool(defval = true,title = 'Long')
+len = input.int(defval = 200,title = 'History Length')
+Plen = input.int(defval = 10,title = 'Pivot Length')
+Alen = input.int(defval = 14,title = 'Atr Length')
+
+Matrix = matrix.new<float>(1,6,0)
+LMatrix = matrix.new<float>(1,6,0)
+SMatrix = matrix.new<float>(1,6,0)
+// =================== Needed Lines
+result = ta.rma(ta.tr(true), Alen)
+upper = high + result * 2
+lower = low - result * 2
+ph = 0.0
+pl = 0.0
+hvol = 0.0
+lvol = 0.0
+ph := nz(ta.pivothigh(high,Plen,Plen),ph[1])
+pl := nz(ta.pivotlow(low,Plen,Plen),pl[1])
+hvol := nz(ta.pivothigh(volume,Plen,Plen),ph[1])
+lvol := nz(ta.pivotlow(volume,Plen,Plen),ph[1])
+
+
+for j=len to 0
+    i = j
+    t = 1
+    while (i-t)>0
+        if (high[i-t]>upper[i] and low[i-t]>lower[i])
+            matrix.set(Matrix,0,0,math.exp((ph[i]-hl2[i])/(ph[i]-pl[i])))
+            matrix.set(Matrix,0,1,math.exp((ph[i]-hl2[i+Plen])/(ph[i]-pl[i])))
+            matrix.set(Matrix,0,2,math.exp((ph[i]-upper[i])/(ph[i]-pl[i])))
+            matrix.set(Matrix,0,3,math.exp((ph[i]-lower[i])/(ph[i]-pl[i])))
+            matrix.set(Matrix,0,4,math.exp((hvol[i]-volume[i])/(hvol[i]-lvol[i])))
+            matrix.set(Matrix,0,5,t)
+            matrix.concat(LMatrix,Matrix)
+            break
+        else if (high[i-t]<upper[i] and low[i-t]<lower[i])
+            matrix.set(Matrix,0,0,math.exp((ph[i]-hl2[i])/(ph[i]-pl[i])))
+            matrix.set(Matrix,0,1,math.exp((ph[i]-hl2[i+Plen])/(ph[i]-pl[i])))
+            matrix.set(Matrix,0,2,math.exp((ph[i]-upper[i])/(ph[i]-pl[i])))
+            matrix.set(Matrix,0,3,math.exp((ph[i]-lower[i])/(ph[i]-pl[i])))
+            matrix.set(Matrix,0,4,math.exp((hvol[i]-volume[i])/(hvol[i]-lvol[i])))
+            matrix.set(Matrix,0,5,t)
+            matrix.concat(SMatrix,Matrix)
+            break
+        else
+            t := t+1
+    if j==0
+        matrix.set(Matrix,0,0,math.exp((ph[i]-hl2[i])/(ph[i]-pl[i])))
+        matrix.set(Matrix,0,1,math.exp((ph[i]-hl2[i+Plen])/(ph[i]-pl[i])))
+        matrix.set(Matrix,0,2,math.exp((ph[i]-upper[i])/(ph[i]-pl[i])))
+        matrix.set(Matrix,0,3,math.exp((ph[i]-lower[i])/(ph[i]-pl[i])))
+        matrix.set(Matrix,0,4,math.exp((hvol[i]-volume[i])/(hvol[i]-lvol[i])))
+        matrix.set(Matrix,0,5,0)
+
+matrix.remove_row(LMatrix,0)
+matrix.remove_row(SMatrix,0)
+
+LMedian = array.new<float>(6,0)
+SMedian = array.new<float>(6,0)
+for j=0 to array.size(LMedian)-1
+    lm = array.median(matrix.col(LMatrix,j))
+    sm = array.median(matrix.col(SMatrix,j))
+    array.set(LMedian,j,lm)
+    array.set(SMedian,j,sm)
+
+LP = 0
+SP = 0
+for j=0 to array.size(LMedian)-2
+    ldiff = math.abs(array.get(LMedian,j)-matrix.get(Matrix,0,j))
+    sdiff = math.abs(array.get(SMedian,j)-matrix.get(Matrix,0,j))
+    if ldiff<sdiff
+        LP := LP+1
+    else
+        SP := SP+1
+nL = matrix.rows(LMatrix)
+nS = matrix.rows(SMatrix)
+plot(LP,color = color.green)
+plot(SP,color = color.red)
+SCond = ta.crossover(LP,SP)
+BCond = ta.crossover(SP,LP)
+ActiveTrade = BCond or SCond or (strategy.position_size!=0)
+// ====================
+if (ActiveTrade)
+    if AST
+        SE = strategy.position_size==0 and SCond
+        TPS=0.0
+        SLS=0.0
+        SIndex = 0
+        if SE
+            strategy.entry("SE",strategy.short)
+            TPS:=lower
+            SLS:=upper
+        else
+            TPS:=TPS[1]
+            SLS:=SLS[1]
+        strategy.exit("EXSE","SE",stop = SLS,limit = TPS)
+    if ALT
+        LE = strategy.position_size==0 and BCond
+        TPL=0.0
+        SLL=0.0
+        LIndex = 0
+        if LE
+            strategy.entry("LE",strategy.long)
+            TPL:=upper
+            SLL:=lower
+        else
+            TPL:=TPL[1]
+            SLL:=SLL[1]
+        strategy.exit("EXLE","LE",stop = SLL,limit = TPL)

@@ -1,0 +1,116 @@
+// This source code is subject to the terms of the Mozilla Public License 2.0 at https://mozilla.org/MPL/2.0/
+// © aminmasood54
+
+//@version=5
+strategy("PCBC+HL",
+         default_qty_type = strategy.percent_of_equity,default_qty_value = 100,
+         commission_type = strategy.commission.percent,commission_value = 0.02,precision=5)
+
+Step = input.int(defval = 20,title = 'Step')
+NOS = input.int(defval = 50,title = 'Number of Sample')
+ETM = input.float(defval = 3,title = 'Entry Treshold Multiplier')
+CTM = input.float(defval = 1,title = 'Close Treshold Multiplier',step = 0.1)
+
+R = array.new<int>(2,0)
+LPro = 0.0
+SPro = 0.0
+X = bar_index
+Y = close
+X2 = math.pow(X,2)
+Y2 = math.pow(Y,2)
+N = NOS*(NOS-1)/2
+for counter=0 to NOS-1
+    i = (counter+1)*Step
+    SX = math.sum(X,i)
+    SY = math.sum(Y,i)
+    SX2 = math.sum(X2,i)
+    SY2 = math.sum(Y2,i)
+    SXY = math.sum(X*Y,i)
+    STD = ta.stdev(hl2,i,0)
+    Slope = (i*SXY-SX*SY)/(i*SX2-math.pow(SX,2))
+    Icpt = (SY-Slope*SX)/i
+    YR2 = Slope*bar_index[1]+Icpt
+    YR1 = Slope*bar_index+Icpt
+    upper1 = YR1+STD
+    lower1 = YR1-STD
+    upper2 = YR2+STD
+    lower2 = YR2-STD
+    A = i*SXY-SX*SY
+    B = i*SX2-math.pow(SX,2)
+    C = i*SY2-math.pow(SY,2)
+    Pear = A/math.sqrt(B*C)
+    if close[1]<upper1 and close>upper2 and Pear<0
+        LPro := LPro + math.abs(Pear)*i
+        array.set(R,0,i)
+    else if close[1]>lower1 and close<lower2 and Pear>0
+        SPro := SPro + math.abs(Pear)*i
+        array.set(R,1,i)
+A = array.get(R,0)
+B = array.get(R,1)
+H = ta.highest(high,Step)
+L = ta.lowest(low,Step)
+
+lCond = low==L
+sCond = high==H
+LCond1 = lCond
+SCond1 = sCond
+nfs = ta.barssince(sCond)
+nfl = ta.barssince(lCond)
+if lCond and nfs>Step
+    for i=Step to nfs-1
+        if low>low[i]
+            LCond1:=false
+            break
+
+if sCond and nfl>Step
+    for i=Step to nfl-1
+        if high<high[i]
+            SCond1:=false
+            break
+plot(LPro,color = color.green,title = 'LPro')
+plot(SPro,color = color.red,title = 'SPro')
+// ===================================
+ETreshold = ETM*Step
+CTreshold = CTM*Step
+LCond2 = ta.crossover(LPro,SPro)
+SCond2 = ta.crossover(SPro,LPro)
+Lind1 = ta.barssince(LCond1)
+Sind1 = ta.barssince(SCond1)
+Lind2 = ta.barssince(LCond2)
+Sind2 = ta.barssince(SCond2)
+if LCond2 and Lind1<Sind1
+    strategy.entry('Long',strategy.long)
+if SCond2 and Lind1>Sind1
+    strategy.entry('Short',strategy.short)
+// if LClose
+//     strategy.close('Long')
+// if SClose
+//     strategy.close('Short')
+// LEON = strategy.position_size>0
+// SEON = strategy.position_size<0
+// NOn = strategy.position_size==0
+// Treshold = TresholdMultiplier*Step
+// LCond = A[1]<Treshold and A>Treshold
+// SCond = B[1]<Treshold and B>Treshold
+// SLL = 0.0
+// SLS = 0.0
+// TPL = 0.0
+// TPS = 0.0
+// LVal = ta.lowest(low,SLLen)
+// SVal = ta.highest(high,SLLen)
+// if LCond and NOn
+//     strategy.entry('Long',strategy.long)
+//     SLL := math.max(LVal,close*(1-Percent/100))
+//     TPL := close+M*(close-LVal)
+// if LEON
+//     SLL := SLL[1]
+//     TPL := TPL[1]
+// if SCond and NOn
+//     strategy.entry('Short',strategy.short)
+//     SLS := math.min(SVal,close*(1+Percent/100))
+//     TPS := close-M*(SVal-close)
+// if SEON
+//     SLS := SLS[1]
+//     TPS := TPS[1]
+// strategy.exit('ExL','Long',stop = SLL,limit = TPL)
+// strategy.exit('ExS','Short',stop = SLS,limit = TPS)

@@ -1,0 +1,77 @@
+//@version=5
+strategy(title="STOCASTIC_Pivot", shorttitle="STOCASTIC_Pivot", format=format.price, precision=2,
+         default_qty_type = strategy.percent_of_equity,default_qty_value = 100,
+         commission_type = strategy.commission.percent,commission_value = 0.02,overlay=true)
+periodK = input.int(20, title="%K Length", minval=1)
+smoothK = input.int(2, title="%K Smoothing", minval=1)
+periodD = input.int(2, title="%D Smoothing", minval=1)
+PivLen = input.int(20, title="PivLen", minval=1)
+Length1 = input.int(22,title='EMALen1')
+Length2 = input.int(19,title='EMALen2')
+BEMALen = input.int(90,title='EMALen')
+upperBandSource = input(high, title='Upper Band Source')
+lowerBandSource = input(low, title='Lower Band Source')
+length = input.int(14, minval=1, title='Period')
+multiplier = input.float(2, minval=0.1, step=0.1, title='Multiplier')
+smoothing = input.string(title='Smoothing', defval='RMA', options=['RMA', 'SMA', 'EMA', 'WMA'])
+
+ma_function(source, length) =>
+    if smoothing == 'RMA'
+        ta.rma(source, length)
+    else
+        if smoothing == 'SMA'
+            ta.sma(source, length)
+        else
+            if smoothing == 'EMA'
+                ta.ema(source, length)
+            else
+                ta.wma(source, length)
+
+result = ma_function(ta.tr(true), length)
+upper = upperBandSource + result * multiplier
+lower = lowerBandSource - result * multiplier
+
+
+// Line1 = ta.ema(close,Length1)
+// Line2 = ta.ema(close,Length1+Length2)
+EMA = ta.ema(close,BEMALen)
+H = 0.0
+L = 0.0
+H := nz(ta.pivothigh(high,PivLen,PivLen),H[1])
+L := nz(ta.pivotlow(low,PivLen,PivLen),L[1])
+// ================================================================
+Start_time = input.time(timestamp("20 Jul 2010 00:00 +0300"), "Star_time")
+End_time = input.time(timestamp("20 Jul 9999 00:00 +0300"), "End_time")
+
+K = ta.sma(ta.stoch(close, high, low, periodK), smoothK)
+D = ta.sma(K, periodD)
+
+LEON = strategy.position_size>0
+SEON = strategy.position_size<0
+NON = strategy.position_size==0
+
+// LCond = ta.crossover(Line1,Line2) and K>D
+// SCond = ta.crossover(Line1,Line2) and K<D
+
+// TimeCond = time>Start_time and time<End_time
+// TPL = 0.0
+// TPS = 0.0
+
+// if LCond and TimeCond
+//     strategy.close('Short')
+//     strategy.entry('Long',strategy.long)
+//     TPL :=math.max(upper,H)
+// if SCond and TimeCond
+//     strategy.close('Long')
+//     strategy.entry('Short',strategy.short)
+//     TPS :=math.min(lower,L)
+
+
+
+// plot(Line1, title="Line1", color=#2962FF,linewidth = 2)
+// plot(Line2, title="Line2", color=color.fuchsia,linewidth = 2)
+plot(EMA, title="EMA", color=color.black,linewidth = 2)
+plot(H, title="H", color=color.red,linewidth = 2)
+plot(L, title="L", color=color.green,linewidth = 2)
+plot(upper, color=color.new(color.silver, 0), linewidth=1, style=plot.style_stepline, title='Upper')
+plot(lower, color=color.new(color.silver, 0), linewidth=1, style=plot.style_stepline, title='Lower')

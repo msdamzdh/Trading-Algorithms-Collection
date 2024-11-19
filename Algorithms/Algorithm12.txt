@@ -1,0 +1,41 @@
+// This source code is subject to the terms of the Mozilla Public License 2.0 at https://mozilla.org/MPL/2.0/
+// © aminmasood54
+
+//@version=5
+
+// @description TODO: add library description here
+library("FisherDiscriminateAnalysis")
+
+// @function TODO: add function description here
+// @param x TODO: add parameter x description here
+// @returns TODO: add what function returns
+export Fisher(matrix<float> A, matrix<float> B, matrix<float> Sample)=>
+	dim = matrix.rows(Sample)
+	uA = matrix.new<float>(dim,1,0)
+	uB = matrix.new<float>(dim,1,0)
+	T = matrix.concat(A,B)
+	for i=0 to dim-1
+		matrix.set(uA,i,0,array.avg(matrix.col(A,i)))
+		matrix.set(uB,i,0,array.avg(matrix.col(B,i)))
+	
+	sb = matrix.diff(uA,uB)
+	nA = matrix.rows(A)
+	nB = matrix.rows(B)
+	swa = matrix.new<float>(1,nA,0)
+	swb = matrix.new<float>(1,nB,0)
+	for i=0 to dim-1
+		xAi_uAi = matrix.diff(matrix.submatrix(A,from_column = i,to_column = i+1),matrix.get(uA,i,0))
+		xBi_uBi = matrix.diff(matrix.submatrix(B,from_column = i,to_column = i+1),matrix.get(uB,i,0))
+		matrix.concat(swa,matrix.transpose(xAi_uAi))
+		matrix.concat(swb,matrix.transpose(xBi_uBi))
+	matrix.remove_row(swa,0)
+	matrix.remove_row(swb,0)
+
+	SWA = matrix.mult(matrix.mult(swa,matrix.transpose(swa)),nA)
+	SWB = matrix.mult(matrix.mult(swb,matrix.transpose(swb)),nB)
+	SW = matrix.sum(SWA,SWB)
+	W = matrix.mult(matrix.pinv(SW),sb)
+	mA = matrix.avg(matrix.mult(A,W))
+	mB = matrix.avg(matrix.mult(B,W))
+	mS = matrix.avg(matrix.mult(matrix.transpose(W),Sample))
+	[mA,mB,mS]

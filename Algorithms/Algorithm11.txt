@@ -1,0 +1,78 @@
+//@version=5
+strategy(title="EMACROSS_STOCASTIC", shorttitle="EMACROSS_STOCASTIC", format=format.price, precision=2,
+         default_qty_type = strategy.percent_of_equity,default_qty_value = 100,
+         commission_type = strategy.commission.percent,commission_value = 0.02,overlay=true)
+periodK = input.int(20, title="%K Length", minval=1)
+smoothK = input.int(2, title="%K Smoothing", minval=1)
+periodD = input.int(2, title="%D Smoothing", minval=1)
+Length1 = input.int(22,title='EMALen1')
+Length2 = input.int(19,title='EMALen2')
+BEMALen = input.int(90,title='EMALen')
+Percent = input.float(defval = 1,title = 'SL Percent',step = 0.1,minval = 0.0)
+// ============================================================
+Line1 = ta.ema(close,Length1)
+Line2 = ta.ema(close,Length1+Length2)
+EMA = ta.ema(close,BEMALen)
+// ================================================================
+ChangeStart = input.bool(defval = false,title = 'Change Start?')
+TimeLen = input.int(defval = 50,title = 'Time Length')
+End_time = input.time(timestamp("1 May 2023 00:00 +0000"), "End_time",confirm = true)
+Start_time = ChangeStart ? End_time-(TimeLen*15*60*1000) : 0
+TimeCond = time>Start_time and time<End_time
+K = ta.sma(ta.stoch(close, high, low, periodK), smoothK)
+D = ta.sma(K, periodD)
+// =================================================
+LCond = ta.crossover(Line1,Line2) and K>D and Line2>EMA
+SCond = ta.crossunder(Line1,Line2) and K<D and Line2<EMA
+// ========================================================================================================================================================
+LEON = strategy.position_size>0
+SEON = strategy.position_size<0
+NON = strategy.position_size==0
+
+SLL = 0.0
+SLS = 0.0
+
+if LCond and TimeCond
+    strategy.entry('Long',strategy.long)
+    SLL := close*(1-Percent/100)
+if LEON
+    SLL:=SLL[1]
+if SCond and TimeCond
+    strategy.entry('Short',strategy.short)
+    SLS := close*(1+Percent/100)
+if SEON
+    SLS:=SLS[1]
+if (TimeCond==false)
+    if LEON
+        strategy.close('Long')
+    if SEON
+        strategy.close('Short')
+strategy.exit('ExL','Long',stop = SLL)
+strategy.exit('ExS','Short',stop = SLS)
+// ==========================================================================================================================================================
+plot(Line1, title="Line1", color=#2962FF,linewidth = 2)
+plot(Line2, title="Line2", color=color.fuchsia,linewidth = 2)
+plot(EMA, title="EMA", color=color.black,linewidth = 2)
+// ====================
+Lev = input.int(defval=10,title='Levrage')
+commision = input.float(defval=0.02,title='Commision %')
+avgGrossProfit(val) =>
+    Profit = 0.0
+    if strategy.closedtrades.size(val)>0
+        Profit := 100*(strategy.closedtrades.exit_price(val)-strategy.closedtrades.entry_price(val))/strategy.closedtrades.entry_price(val)
+    else
+        Profit :=100*(-strategy.closedtrades.exit_price(val)+strategy.closedtrades.entry_price(val))/strategy.closedtrades.entry_price(val)
+    Profit :=  Profit - 2*commision
+PrfPT = avgGrossProfit(strategy.closedtrades-1)
+EquityVal=1.0
+if strategy.closedtrades==0
+    EquityVal:=1
+else
+    if strategy.closedtrades>strategy.closedtrades[1]
+        EquityVal:=(1+Lev*PrfPT/100)*EquityVal[1]
+    else
+        EquityVal:=EquityVal[1]
+var testTable = table.new(position = position.top_right, columns = 2, rows = 1, bgcolor = color.yellow, border_width = 1)
+if barstate.isconfirmed
+    table.cell(table_id = testTable, column = 0, row = 0, text = "Profit is ")
+    table.cell(table_id = testTable, column = 1, row = 0, text = str.tostring((EquityVal-1)*100)+'%', bgcolor=color.teal)

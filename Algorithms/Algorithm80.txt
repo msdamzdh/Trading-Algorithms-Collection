@@ -1,0 +1,147 @@
+import TradingView/ta/5
+
+// This source code is subject to the terms of the Mozilla Public License 2.0 at https://mozilla.org/MPL/2.0/
+// © aminmasood54
+
+//@version=5
+strategy("VolumeProfileDist2",overlay = false,
+         default_qty_type = strategy.percent_of_equity,default_qty_value = 100,
+         commission_type = strategy.commission.percent,commission_value = 0.02)
+Length = input.int(defval = 96,title = 'Length',step = 1,group = 'Volume Profile')
+Nor = input.int(defval = 5,title = 'Number of range',step=1,group = 'Volume Profile')
+useDVP = input.bool(defval = false,title = 'Use DVP',group = 'Volume Profile')
+level = input.int(defval = 20,title = 'RSI Level',step = 5,group = 'RSI')
+useRSI = input.bool(defval = false,title = 'Use RSI',group = 'RSI')
+useLevel = input.bool(defval = false,title = 'Use Level',group = 'RSI')
+MALen0 = input.int(defval = 5,title = 'MALen0',step = 5,group = 'MA')
+MALen1 = input.int(defval = 20,title = 'MALen1',step = 5,group = 'MA')
+MALen2 = input.int(defval = 50,title = 'MALen2',step = 5,group = 'MA')
+
+setRange(H,L,Nor)=>
+    Range = array.new<float>(Nor+1,0.0)
+    step = (H-L)/Nor
+    for i=0 to Nor
+        array.set(Range,i,L+i*step)
+    Range
+
+
+h = 0.0
+l = 0.0
+H = ta.highest(high,Length)
+L = ta.lowest(low,Length)
+VP = array.new<float>(Nor,0.0)
+Range = setRange(H,L,Nor)
+for i=0 to Length
+    for j=0 to Nor-1
+        if (close[i]>=array.get(Range,j) and close[i]<array.get(Range,j+1))
+            array.set(VP,j,array.get(VP,j)+volume[i])
+            break
+ind = array.indexof(VP,array.max(VP))
+Cond = hour(time)==0 and minute(time)==0
+Line =0.0
+if useDVP
+    if Cond
+        Line := (array.get(Range,ind)+array.get(Range,ind+1))/2
+    else
+        Line := Line[1]
+else
+    Line := (array.get(Range,ind)+array.get(Range,ind+1))/2
+
+
+Line0 = (Line[Length]-ta.vwma(close,MALen0))
+Line1 = ta.sma(Line0,MALen1)
+Line2 = ta.sma(Line0,MALen2)
+
+RSI0 =  ta.rsi(Line0,MALen0)
+RSI1 = ta.rsi(Line0,MALen1)
+RSI2 = ta.rsi(Line0,MALen2)
+
+plot(useRSI? RSI0:Line0,title = 'MA1',color = color.blue)
+plot(useRSI? RSI1:Line1,title = 'RSI1',color = color.green)
+plot(useRSI? RSI2:Line2,title = 'RSI2',color = color.red)
+
+// ==============================================================
+TPP = input.float(defval = 3,title = 'TPP',step = 0.1,group = 'Trade')
+SLP = input.float(defval = 2,title = 'SLP',step = 0.1,group = 'Trade')
+TradeLong = input.bool(false,'TradeLong')
+TradeShort = input.bool(false,'TradeShort')
+UseClose = input.bool(false,'Close Orders?')
+SW = input.bool(false,'SwitchCond')
+
+lcond = false
+scond = false
+lclose = false
+sclose = false
+if useRSI
+    lcond := ta.crossover(RSI1,RSI2)
+    scond := ta.crossover(RSI2,RSI1)
+    if useLevel
+        lcond := lcond and RSI1<level
+        scond := scond and RSI1>(100-level)
+else
+    lcond := ta.crossunder(Line1,Line2) and Line1>0
+    scond := ta.crossover(Line1,Line2) and Line1<0
+
+LCond = TradeLong and lcond
+SCond = TradeShort and scond
+LClose = UseClose and lclose
+SClose = UseClose and sclose
+
+if SW
+    a = LCond
+    LCond := SCond
+    SCond := a
+    b = SClose
+    SClose := LClose
+    LClose := b
+bgcolor(color = LCond?color.new(color.green,60):SCond?color.new(color.red,60):na)
+SLL = 0.0
+SLS = 0.0
+TPL = 0.0
+TPS = 0.0
+if LCond
+    strategy.entry('Long',strategy.long)
+    SLL := close*(1-SLP/100)
+    TPL := close*(1+TPP/100)
+if strategy.position_size>0
+    SLL := SLL[1]
+    TPL := TPL[1]
+if SCond
+    strategy.entry('Short',strategy.short)
+    SLS := close*(1+SLP/100)
+    TPS := close*(1-TPP/100)
+if strategy.position_size<0
+    SLS := SLS[1]
+    TPS := TPS[1]
+if LClose
+    strategy.close('Long')
+if SClose
+    strategy.close('Short')
+strategy.exit('ExL','Long',limit = TPL,stop = SLL)
+strategy.exit('ExS','Short',limit = TPS,stop = SLS)
+
+Lev = input.int(defval=10,title='Levrage')
+commision = input.float(defval=0.02,title='Commision %')
+avgGrossProfit(val) =>
+    Profit = 0.0
+    if strategy.closedtrades.size(val)>0
+        Profit := 100*(strategy.closedtrades.exit_price(val)-strategy.closedtrades.entry_price(val))/strategy.closedtrades.entry_price(val)
+    else
+        Profit :=100*(-strategy.closedtrades.exit_price(val)+strategy.closedtrades.entry_price(val))/strategy.closedtrades.entry_price(val)
+    Profit :=  Profit - 2*commision
+PrfPT = avgGrossProfit(strategy.closedtrades-1)
+EquityVal=1.0
+if strategy.closedtrades==0
+    EquityVal:=1
+else
+    if strategy.closedtrades>strategy.closedtrades[1]
+        EquityVal:=(1+Lev*PrfPT/100)*EquityVal[1]
+    else
+        EquityVal:=EquityVal[1]
+var testTable = table.new(position = position.top_right, columns = 2, rows = 1, bgcolor = color.yellow, border_width = 1)
+if barstate.isconfirmed
+    table.cell(table_id = testTable, column = 0, row = 0, text = "Profit is ")
+    table.cell(table_id = testTable, column = 1, row = 0, text = str.tostring((EquityVal-1)*100)+'%', bgcolor=color.teal)
+
+
+

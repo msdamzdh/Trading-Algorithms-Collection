@@ -1,0 +1,48 @@
+// This source code is subject to the terms of the Mozilla Public License 2.0 at https://mozilla.org/MPL/2.0/
+// © aminmasood54
+
+//@version=5
+strategy("EMA Pullback",overlay = true,
+         default_qty_type = strategy.percent_of_equity,default_qty_value = 100,
+         commission_type = strategy.commission.percent,commission_value = 0.02)
+Len1 = input.int(defval = 20,title = 'EMA Len1')
+Len2 = input.int(defval = 50,title = 'EMA Len2')
+LCL = input.source(defval = low,title = 'Long cross line')
+SCL = input.source(defval = high,title = 'Short cross line')
+CWE = input.string(defval = 'EMA1',title = 'Cross with',options = ['EMA1','EMA2'])
+Percent = input.float(defval = 1,title = 'TP Percent')
+
+EMA1 = ta.ema(close,Len1)
+EMA2 = ta.ema(close,Len2)
+
+LClose = ta.crossunder(EMA1,EMA2)
+SClose = ta.crossover(EMA1,EMA2)
+LCond = (CWE=='EMA1'?ta.crossover(LCL,EMA1):ta.crossover(LCL,EMA2)) and EMA1>EMA2
+SCond = (CWE=='EMA1'?ta.crossunder(SCL,EMA1):ta.crossunder(SCL,EMA2)) and EMA1<EMA2
+
+LEON = strategy.position_size>0
+SEON = strategy.position_size<0
+
+TPL = 0.0
+TPS = 0.0
+// ===============================================Long Trades
+if LCond
+    strategy.entry('Long',strategy.long)
+    TPL := (1+Percent/100)*close
+if LEON
+    TPL := TPL[1]
+if LClose and LEON
+    strategy.close('Long')
+strategy.exit('ExL','Long',limit = TPL)
+// ======================================Short Trades
+if SCond
+    strategy.entry('Short',strategy.short)
+    TPS := (1-Percent/100)*close
+if SEON
+    TPS := TPS[1]
+if SClose and SEON
+    strategy.close('Short')
+strategy.exit('ExS','Short',limit = TPS)
+// ===========================================Plots
+plot(EMA1,title = 'EMA1',color = color.blue,linewidth = 2)
+plot(EMA2,title = 'EMA2',color = color.black,linewidth = 2)

@@ -1,0 +1,141 @@
+// This source code is subject to the terms of the Mozilla Public License 2.0 at https://mozilla.org/MPL/2.0/
+// © aminmasood54
+
+//@version=5
+strategy("Pivot Similarity")
+AST = input.bool(defval = true,title = 'Short')
+ALT = input.bool(defval = true,title = 'Long')
+len = input(10,title = 'Length')
+nop = input(5,title = 'Number of Pivot')
+stp = input(3,title = 'Start point')
+removeCandle = input(300,title = 'Remove Candle')
+result = ta.rma(ta.tr(true), 14)
+upper = high + result * 3
+lower = low - result * 3
+hp = ta.pivothigh(high,len,len)
+lp = ta.pivothigh(low,len,len)
+HP = 0.0
+LP = 0.0
+HP := nz(ta.pivothigh(high,len,len),HP[1])
+LP := nz(ta.pivothigh(low,len,len),LP[1])
+PV = array.new<float>(0)
+PI = array.new<int>(0)
+cond1 = na(hp)==false
+cond2 = na(lp)==false
+Cond = cond1 or cond2
+minD = 0.0
+a=1
+for i=1000 to 1
+    if Cond[i]
+        if (cond1[i] and cond2[i])
+            array.push(PV,high[i+len])
+            array.push(PI,bar_index[i+len])
+            array.push(PV,low[i+len])
+            array.push(PI,bar_index[i+len])
+        else if cond1[i]
+            array.push(PV,high[i+len])
+            array.push(PI,bar_index[i+len])
+        else if cond2[i]
+            array.push(PV,low[i+len])
+            array.push(PI,bar_index[i+len])
+
+BCond = false
+SCond = false
+start = input(0.02)
+increment = input(0.02)
+maximum = input(0.2, "Max Value")
+out = ta.sar(start, increment, maximum)
+minD2 = 0
+Index = 0
+sd = 0
+if bar_index>removeCandle
+    if array.size(PV)>stp+nop
+        pv = array.standardize(array.slice(PV,0,nop))
+        pvi = array.slice(PI,0,nop)
+        mpvi = array.min(pvi)
+        for i=0 to nop-1
+            array.set(pvi,i,array.get(pvi,i)-mpvi)
+        pvi:=array.standardize(pvi)
+        Dist = array.new<float>(0)
+        for i=stp to array.size(PV)-nop-1
+            pv2 = array.standardize(array.slice(PV,i,nop+i))
+            pvi2 = array.slice(PI,i,nop+i)
+            mpvi2 = array.min(pvi)
+            for j=0 to nop-1
+                array.set(pvi2,j,array.get(pvi2,j)-mpvi2)
+            pvi2:=array.standardize(pvi2)
+            dist = 0.0
+            for j=0 to nop-1
+                val1 = math.abs(array.get(pv,j)-array.get(pv2,j))
+                val2 = math.abs(array.get(pvi,j)-array.get(pvi2,j))
+                dist := dist+(val1+val2)/nop
+            array.push(Dist,dist)
+        minD := array.min(Dist)
+        Index := array.indexof(Dist,minD)+stp+nop
+        if (Index+1)<=array.size(PV)-1
+            pvp = array.get(PV,Index)
+            npvp = array.get(PV,Index+1)
+            if npvp>pvp
+                BCond := true and out<low and out[1]>high[1]
+                // upper := high*(1+(npvp-pvp)/pvp)
+                // lower := low * (1-(npvp-pvp)/pvp)
+            else
+                SCond := true and out>high and out[1]<low[1]
+                // upper := high*(1+(-npvp+pvp)/npvp)
+                // lower := low*(1-(-npvp+pvp)/npvp)
+        else
+            pvp = array.get(PV,Index-1)
+            npvp = array.get(PV,Index)
+            if npvp>pvp
+                BCond := true and out<low and out[1]>high[1]
+                // upper := high*(1+(npvp-pvp)/pvp)
+                // lower := low * (1-(npvp-pvp)/pvp)
+            else
+                SCond := true and out>high and out[1]<low[1]
+                // upper := high*(1+(-npvp+pvp)/npvp)
+                // lower := low*(1-(-npvp+pvp)/npvp)
+
+// plot(Index)
+// plot(minD2,color = color.red)
+// plot(minD,color = color.black)
+// plot(sd,color = color.green)
+// plot(upper,color = color.red)
+// plot(lower)
+
+ActiveTrade = (BCond or SCond) or (strategy.position_size!=0)
+// ====================
+if (ActiveTrade)
+    if strategy.position_size>0 and SCond
+        strategy.close('LE')
+    if strategy.position_size<0 and BCond
+        strategy.close('SE')
+    if AST
+        SE = strategy.position_size==0 and SCond
+        TPS=0.0
+        SLS=0.0
+        SIndex = 0
+        if SE
+            strategy.entry("SE",strategy.short)
+            TPS:=lower
+            SLS:=upper
+        else
+            TPS:=TPS[1]
+            SLS:=SLS[1]
+        strategy.exit("EXSE","SE",stop = SLS,limit = TPS)
+    if ALT
+        LE = strategy.position_size==0 and BCond
+        TPL=0.0
+        SLL=0.0
+        LIndex = 0
+        if LE
+            strategy.entry("LE",strategy.long)
+            TPL:=upper
+            SLL:=lower
+        else
+            TPL:=TPL[1]
+            SLL:=SLL[1]
+        strategy.exit("EXLE","LE",stop = SLL,limit = TPL)
+    
+
+           
+

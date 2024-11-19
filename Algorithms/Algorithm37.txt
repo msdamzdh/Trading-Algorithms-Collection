@@ -1,0 +1,91 @@
+// This source code is subject to the terms of the Mozilla Public License 2.0 at https://mozilla.org/MPL/2.0/
+// © aminmasood54
+
+//@version=5
+strategy("Pearson Criteria",
+         default_qty_type = strategy.percent_of_equity,default_qty_value = 100,
+         commission_type = strategy.commission.percent,commission_value = 0.02)
+
+Step = input.int(defval = 20,title = 'Step')
+NOS = input.int(defval = 50,title = 'Number of Sample')
+SwitchCond = input.bool(defval = false,title = 'Switch Condition')
+Type = input.string(defval = 'Type1',options = ['Type1','Type2'])
+Percent = input.float(defval = 1,title = 'SL Percent',group = 'Type2')
+M = input.float(defval = 2,title = 'R/R',step = 0.1,group = 'Type2')
+
+R = array.new<float>(NOS)
+LPro = 0.0
+SPro = 0.0
+X = bar_index
+Y = close
+X2 = math.pow(X,2)
+Y2 = math.pow(Y,2)
+N = NOS*(NOS-1)/2
+for counter=0 to NOS-1
+    i = (counter+1)*Step
+    SX = math.sum(X,i)
+    SY = math.sum(Y,i)
+    SX2 = math.sum(X2,i)
+    SY2 = math.sum(Y2,i)
+    SXY = math.sum(X*Y,i)
+    STD = ta.stdev(hl2,i,0)
+    Slope = (i*SXY-SX*SY)/(i*SX2-math.pow(SX,2))
+    Icpt = (SY-Slope*SX)/i
+    YR = Slope*bar_index+Icpt
+    upper = YR+STD
+    lower = YR-STD
+    Dist = 2*STD
+    Distup = upper-close
+    Distlow = close-lower
+    A = i*SXY-SX*SY
+    B = i*SX2-math.pow(SX,2)
+    C = i*SY2-math.pow(SY,2)
+    Pear = A/math.sqrt(B*C)
+    if close<lower
+        LPro := LPro+math.abs(Pear)
+        // SPro := SPro+math.abs(Pear)*(counter+1)/N
+    else if close>upper
+        SPro := SPro+math.abs(Pear)
+        // LPro := LPro+math.abs(Pear)*(counter+1)/N
+    else
+        LPro := LPro+Distup*math.abs(Pear)/Dist*(counter+1)/N
+        SPro := SPro+Distlow*math.abs(Pear)/Dist*(counter+1)/N
+    array.set(R,counter,Pear)
+
+plot(LPro,color = color.green,title = 'LPro')
+plot(SPro,color = color.red,title = 'SPro')
+// ===================================
+LEON = strategy.position_size>0
+SEON = strategy.position_size<0
+NOn = strategy.position_size==0
+LCond = ta.crossover(LPro,SPro)
+SCond = ta.crossover(SPro,LPro)
+if SwitchCond
+    LCond := ta.crossover(SPro,LPro)
+    SCond := ta.crossover(LPro,SPro)
+if Type=='Type2'
+    SLL = 0.0
+    SLS = 0.0
+    TPL = 0.0
+    TPS = 0.0
+    if LCond and NOn
+        strategy.entry('Long',strategy.long)
+        SLL := (1-Percent/100)*close
+        TPL := (1+M*Percent/100)*close
+    if LEON
+        SLL := SLL[1]
+        TPL := TPL[1]
+    if SCond and NOn
+        strategy.entry('Short',strategy.short)
+        SLS := (1+Percent/100)*close
+        TPS := (1-M*Percent/100)*close
+    if SEON
+        SLS := SLS[1]
+        TPS := TPS[1]
+    strategy.exit('ExL','Long',stop = SLL,limit = TPL)
+    strategy.exit('ExS','Short',stop = SLS,limit = TPS)
+else if Type=='Type1'
+    if LCond
+        strategy.entry('Long',strategy.long)
+    if SCond
+        strategy.entry('Short',strategy.short)

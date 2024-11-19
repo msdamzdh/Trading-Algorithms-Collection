@@ -1,0 +1,37 @@
+// This source code is subject to the terms of the Mozilla Public License 2.0 at https://mozilla.org/MPL/2.0/
+// © aminmasood54
+
+//@version=5
+strategy("Poly Regression EMA",overlay=true,
+         default_qty_type = strategy.percent_of_equity,default_qty_value = 100,
+         commission_type = strategy.commission.percent,commission_value = 0.02)
+import aminmasood54/Polynomial3/4 as PR
+
+DOP1 = input.int(defval=3,title = 'Degree1')
+DOP2 = input.int(defval=5,title = 'Degree2')
+N = input.int(defval=100,title = 'Number of data',step = 5)
+EMA = ta.ema(close,20)
+[p1,e1] = PR.PolyNomial(DOP1,N,1,EMA)
+[p2,e2] = PR.PolyNomial(DOP2,N,1,EMA)
+// [p3,e3] = PR.PolyNomial(DOP2+DOP1,N,1,close)
+Price1 = matrix.get(p1,0,0)
+Price2 = matrix.get(p2,0,0)
+// Price3 = matrix.get(p3,0,0)
+plot(Price1)
+plot(Price2,color = color.red)
+// plot(Price3,color = color.black)
+
+
+LCond = ta.crossover(Price2,Price1)
+SCond = ta.crossover(Price1,Price2)
+LExit = strategy.position_size>0 and ta.crossunder(Price1,Price2)
+SExit = strategy.position_size<0 and ta.crossover(Price1,Price2)
+if LCond
+    strategy.entry('Long',strategy.long)
+if SCond
+    strategy.entry('Short',strategy.short)
+
+// if LExit
+//     strategy.close('Long')
+// if SExit
+//     strategy.close('Short')

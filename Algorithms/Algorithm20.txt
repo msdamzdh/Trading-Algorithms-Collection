@@ -1,0 +1,127 @@
+// This source code is subject to the terms of the Mozilla Public License 2.0 at https://mozilla.org/MPL/2.0/
+// © aminmasood54
+
+//@version=5
+strategy("HL Fractal",overlay = true,initial_capital=100,
+     default_qty_type=strategy.percent_of_equity,default_qty_value=100)
+Len = input.int(defval = 100,title = 'Length')
+H = ta.highest(high,Len)
+L = ta.lowest(low,Len)
+n = input.int(title="Periods", defval=2, minval=2)
+// ==========================
+
+
+// UpFractal
+bool upflagDownFrontier = true
+bool upflagUpFrontier0 = true
+bool upflagUpFrontier1 = true
+bool upflagUpFrontier2 = true
+bool upflagUpFrontier3 = true
+bool upflagUpFrontier4 = true
+
+for i = 1 to n
+    upflagDownFrontier := upflagDownFrontier and (high[n-i] < high[n])
+    upflagUpFrontier0 := upflagUpFrontier0 and (high[n+i] < high[n])
+    upflagUpFrontier1 := upflagUpFrontier1 and (high[n+1] <= high[n] and high[n+i + 1] < high[n])
+    upflagUpFrontier2 := upflagUpFrontier2 and (high[n+1] <= high[n] and high[n+2] <= high[n] and high[n+i + 2] < high[n])
+    upflagUpFrontier3 := upflagUpFrontier3 and (high[n+1] <= high[n] and high[n+2] <= high[n] and high[n+3] <= high[n] and high[n+i + 3] < high[n])
+    upflagUpFrontier4 := upflagUpFrontier4 and (high[n+1] <= high[n] and high[n+2] <= high[n] and high[n+3] <= high[n] and high[n+4] <= high[n] and high[n+i + 4] < high[n])
+flagUpFrontier = upflagUpFrontier0 or upflagUpFrontier1 or upflagUpFrontier2 or upflagUpFrontier3 or upflagUpFrontier4
+
+upFractal = (upflagDownFrontier and flagUpFrontier)
+
+
+// downFractal
+bool downflagDownFrontier = true
+bool downflagUpFrontier0 = true
+bool downflagUpFrontier1 = true
+bool downflagUpFrontier2 = true
+bool downflagUpFrontier3 = true
+bool downflagUpFrontier4 = true
+
+for i = 1 to n
+    downflagDownFrontier := downflagDownFrontier and (low[n-i] > low[n])
+    downflagUpFrontier0 := downflagUpFrontier0 and (low[n+i] > low[n])
+    downflagUpFrontier1 := downflagUpFrontier1 and (low[n+1] >= low[n] and low[n+i + 1] > low[n])
+    downflagUpFrontier2 := downflagUpFrontier2 and (low[n+1] >= low[n] and low[n+2] >= low[n] and low[n+i + 2] > low[n])
+    downflagUpFrontier3 := downflagUpFrontier3 and (low[n+1] >= low[n] and low[n+2] >= low[n] and low[n+3] >= low[n] and low[n+i + 3] > low[n])
+    downflagUpFrontier4 := downflagUpFrontier4 and (low[n+1] >= low[n] and low[n+2] >= low[n] and low[n+3] >= low[n] and low[n+4] >= low[n] and low[n+i + 4] > low[n])
+flagDownFrontier = downflagUpFrontier0 or downflagUpFrontier1 or downflagUpFrontier2 or downflagUpFrontier3 or downflagUpFrontier4
+
+downFractal = (downflagDownFrontier and flagDownFrontier)
+
+// plotshape(downFractal, style=shape.triangledown, location=location.belowbar, offset=-n, color=#F44336, size = size.small)
+// plotshape(upFractal, style=shape.triangleup,   location=location.abovebar, offset=-n, color=#009688, size = size.small)
+// ========================================================
+lCond = low==L
+sCond = high==H
+LCond = lCond
+SCond = sCond
+nfs = ta.barssince(sCond)
+nfl = ta.barssince(lCond)
+if lCond and nfs>Len
+    for i=Len to nfs-1
+        if low>low[i]
+            LCond:=false
+            break
+
+if sCond and nfl>Len
+    for i=Len to nfl-1
+        if high<high[i]
+            SCond:=false
+            break
+
+plot(L,color = color.red)
+plot(H,color = color.black)
+bgcolor(color = LCond?color.new(color.green,60):SCond?color.new(color.red,60):na)
+// =====================================================
+// =======================================
+H2 = 0.0
+L2 = 0.0
+if LCond
+    for i=0 to Len
+        if upFractal[i]
+            H2:=high[i+n]
+            break
+if SCond
+    for i=0 to Len
+        if downFractal[i]
+            L2:=low[i+n]
+            break
+if H2==0
+    H2:=H2[1]
+if L2==0
+    L2:=L2[1]
+// plot(L2,color = color.blue)
+// plot(H2,color = color.green)
+// =================================
+Lindex = ta.valuewhen(LCond,bar_index,0)
+Sindex = ta.valuewhen(SCond,bar_index,0)
+LCond2 = ta.crossover(close,H2) and Lindex>Sindex
+SCond2 = ta.crossunder(close,L2) and Sindex>Lindex
+SEON = strategy.position_size<0
+LEON = strategy.position_size>0
+if LCond2
+    strategy.entry('Long',strategy.long)
+if SCond2
+    strategy.entry('Short',strategy.short)
+// ==================================================================================
+Lev = input.int(defval=10,title='Levrage')
+commision = input.float(defval=0.02,title='Commision %')
+avgGrossProfit(val) =>
+    Profit = 0.0
+    if strategy.closedtrades.size(val)>0
+        Profit := 100*(strategy.closedtrades.exit_price(val)-strategy.closedtrades.entry_price(val))/strategy.closedtrades.entry_price(val)
+    else
+        Profit :=100*(-strategy.closedtrades.exit_price(val)+strategy.closedtrades.entry_price(val))/strategy.closedtrades.entry_price(val)
+    Profit :=  Profit - 2*commision
+
+EquityVal=1.0
+for i=0 to strategy.closedtrades-1
+    EquityVal:=EquityVal*(1+Lev*avgGrossProfit(i)/100)
+Labels = array.new_label(0)
+if barstate.islastconfirmedhistory
+    if array.size(Labels)>1
+        label.delete(array.get(Labels,0))
+    Labels.push(label.new(x=bar_index,y=high,text='Profit : '+str.tostring((EquityVal-1)*100)+'%',color = color.black,textcolor = color.white))
+// ===============================================================================================

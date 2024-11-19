@@ -1,0 +1,53 @@
+// This source code is subject to the terms of the Mozilla Public License 2.0 at https://mozilla.org/MPL/2.0/
+// © aminmasood54
+
+//@version=5
+strategy("PFP_R/R", overlay=false,
+         default_qty_type = strategy.percent_of_equity,default_qty_value = 100,
+         commission_type = strategy.commission.percent,commission_value = 0.02)
+
+Len = input.int(defval = 20,title = 'Length',step = 5)
+TLevel = input.float(0.5,title = 'TLevel',step = 1)
+R = input.float(defval = 1,title = 'R/R',step = 0.1)
+sw1 = input.bool(false,'Switch Cond1?')
+sw2 = input.bool(false,'Switch Cond2?')
+H = ta.highest(high,Len)
+L = ta.lowest(low,Len)
+
+h = (H-close)/H*100
+l = (close-L)/L*100
+rh = ta.rsi(h,Len)
+rl = ta.rsi(l,Len)
+dis = rh-rl
+
+L1 = sw1?rh:rl
+L2 = sw1?rl:rh
+LCond = sw2? ta.crossover(L1,L2) and ta.crossover(dis,TLevel) : ta.crossover(L1,L2) and ta.crossunder(dis,TLevel)
+SCond = sw2 ? ta.crossover(L2,L1) and ta.crossunder(dis,TLevel): ta.crossover(L2,L1) and ta.crossover(dis,TLevel)
+
+plot(rh,color = color.red)
+plot(rl,color = color.green)
+
+plot(dis,color = color.black)
+bgcolor(color=LCond?color.new(color.green,60):SCond?color.new(color.red,60):na)
+SLL = 0.0
+SLS = 0.0
+TPL = 0.0
+TPS = 0.0
+if strategy.position_size>0
+    SLL := SLL[1]
+    TPL := TPL[1]
+if strategy.position_size<0
+    SLS := SLS[1]
+    TPS := TPS[1]
+if LCond
+    strategy.entry('Long',strategy.long)
+    SLL := L
+    TPL := close+(close-L)*R
+if SCond
+    strategy.entry('Short',strategy.short)
+    SLS := H
+    TPS := close-(H-close)*R
+
+strategy.exit('ExL','Long',limit = TPL,stop = SLL)
+strategy.exit('ExS','Short',limit = TPS,stop = SLS)

@@ -1,0 +1,110 @@
+//@version=5
+strategy(title="Ichimoku+PMaxRsi", shorttitle="Ichimoku+PMaxRsi", overlay=true,initial_capital=100,
+     default_qty_type=strategy.percent_of_equity,default_qty_value=100,
+     commission_type=strategy.commission.percent,commission_value=0.02)
+conversionPeriods = input.int(9, minval=1, title="Conversion Line Length")
+basePeriods = input.int(26, minval=1, title="Base Line Length")
+laggingSpan2Periods = input.int(52, minval=1, title="Leading Span B Length")
+displacement = input.int(26, minval=1, title="Lagging Span")
+donchian(len) => math.avg(ta.lowest(len), ta.highest(len))
+conversionLine = donchian(conversionPeriods)
+baseLine = donchian(basePeriods)
+leadLine1 = math.avg(conversionLine, baseLine)
+leadLine2 = donchian(laggingSpan2Periods)
+plot(conversionLine, color=#2962FF, title="Conversion Line")
+plot(baseLine, color=#B71C1C, title="Base Line")
+plot(close, offset = -displacement + 1, color=#43A047, title="Lagging Span")
+p1 = plot(leadLine1, offset = displacement - 1, color=#A5D6A7,
+	 title="Leading Span A")
+p2 = plot(leadLine2, offset = displacement - 1, color=#EF9A9A,
+	 title="Leading Span B")
+plot(leadLine1 > leadLine2 ? leadLine1 : leadLine2, offset = displacement - 1, title = "Kumo Cloud Upper Line", display = display.none) 
+plot(leadLine1 < leadLine2 ? leadLine1 : leadLine2, offset = displacement - 1, title = "Kumo Cloud Lower Line", display = display.none) 
+fill(p1, p2, color = leadLine1 > leadLine2 ? color.rgb(67, 160, 71, 90) : color.rgb(244, 67, 54, 90))
+MaxLine = math.max(leadLine1[displacement - 1],leadLine2[displacement - 1])
+MinLine = math.min(leadLine1[displacement - 1],leadLine2[displacement - 1])
+// ============================================
+src = input(hl2, title='Source')
+Multiplier = input.float(title='ATR Multiplier', step=0.1, defval=3)
+length = input.int(8, 'Tillson T3 Length', minval=1)
+T3a1 = input.float(0.7, 'TILLSON T3 Volume Factor', step=0.1)
+Periods = input(10, title='ATR Length')
+rsilength = input.int(14, minval=1, title='RSI Length')
+Percent = input.float(defval = 2,title = 'Percent',step = 0.1)
+i = close >= close[1] ? close - close[1] : 0
+i2 = close < close[1] ? close[1] - close : 0
+Wwma_Func(src, rsilength) =>
+    wwalpha = 1 / rsilength
+    WWMA = 0.0
+    WWMA := wwalpha * src + (1 - wwalpha) * nz(WWMA[1])
+    WWMA
+WWMA = Wwma_Func(src, rsilength)
+AvUp = Wwma_Func(i, rsilength)
+AvDown = Wwma_Func(i2, rsilength)
+AvgUp = ta.sma(i, rsilength)
+AvgDown = ta.sma(i2, rsilength)
+k1 = high > close[1] ? high - close[1] : 0
+k2 = high < close[1] ? close[1] - high : 0
+k3 = low > close[1] ? low - close[1] : 0
+k4 = low < close[1] ? close[1] - low : 0
+AvgUpH = (AvgUp * (rsilength - 1) + k1) / rsilength
+AvgDownH = (AvgDown * (rsilength - 1) + k2) / rsilength
+AvgUpL = (AvgUp * (rsilength - 1) + k3) / rsilength
+AvgDownL = (AvgDown * (rsilength - 1) + k4) / rsilength
+rs = AvUp / AvDown
+rsi = rs == -1 ? 0 : 100 - 100 / (1 + rs)
+rsh = AvgUpH / AvgDownH
+rsih = rsh == -1 ? 0 : 100 - 100 / (1 + rsh)
+rsl = AvgUpL / AvgDownL
+rsil = rsl == -1 ? 0 : 100 - 100 / (1 + rsl)
+TR = math.max(rsih - rsil, math.abs(rsih - rsi[1]), math.abs(rsil - rsi[1]))
+atr = ta.sma(TR, Periods)
+T3e1 = ta.ema(rsi, length)
+T3e2 = ta.ema(T3e1, length)
+T3e3 = ta.ema(T3e2, length)
+T3e4 = ta.ema(T3e3, length)
+T3e5 = ta.ema(T3e4, length)
+T3e6 = ta.ema(T3e5, length)
+T3c1 = -T3a1 * T3a1 * T3a1
+T3c2 = 3 * T3a1 * T3a1 + 3 * T3a1 * T3a1 * T3a1
+T3c3 = -6 * T3a1 * T3a1 - 3 * T3a1 - 3 * T3a1 * T3a1 * T3a1
+T3c4 = 1 + 3 * T3a1 + T3a1 * T3a1 * T3a1 + 3 * T3a1 * T3a1
+T3 = T3c1 * T3e6 + T3c2 * T3e5 + T3c3 * T3e4 + T3c4 * T3e3
+MAvg = T3
+Pmax_Func(rsi, length) =>
+    longStop = MAvg - Multiplier * atr
+    longStopPrev = nz(longStop[1], longStop)
+    longStop := MAvg > longStopPrev ? math.max(longStop, longStopPrev) : longStop
+    shortStop = MAvg + Multiplier * atr
+    shortStopPrev = nz(shortStop[1], shortStop)
+    shortStop := MAvg < shortStopPrev ? math.min(shortStop, shortStopPrev) : shortStop
+    dir = 1
+    dir := nz(dir[1], dir)
+    dir := dir == -1 and MAvg > shortStopPrev ? 1 : dir == 1 and MAvg < longStopPrev ? -1 : dir
+    PMax = dir == 1 ? longStop : shortStop
+    PMax
+PMax = Pmax_Func(rsi, length)
+
+buySignalk = ta.crossover(MAvg, PMax)
+sellSignallk = ta.crossunder(MAvg, PMax)
+// ================================================
+BCond = (ta.crossover(low,MaxLine) and PMax<MAvg) or (ta.crossover(MAvg,PMax) and low>MaxLine)
+SCond = (ta.crossunder(high,MinLine) and PMax>MAvg) or (ta.crossunder(MAvg,PMax) and high<MinLine)
+
+SLL = 0.0
+LOn = strategy.position_size>0
+if BCond
+    SLL := (1-Percent/100)*close
+    strategy.entry('Long',strategy.long)
+if LOn
+    SLL := SLL[1]
+strategy.exit('ExitLong','Long',stop = SLL)
+// ===================================================
+SLS = 0.0
+SOn = strategy.position_size<0
+if SCond
+    SLS := (1+Percent/100)*close
+    strategy.entry('Short',strategy.short)
+if SOn
+    SLS := SLS[1]
+strategy.exit('ExitShort','Short',stop = SLS)

@@ -1,0 +1,68 @@
+// This work is licensed under a Attribution-NonCommercial-ShareAlike 4.0 International (CC BY-NC-SA 4.0) https://creativecommons.org/licenses/by-nc-sa/4.0/
+// © LuxAlgo
+
+//@version=5
+// strategy("Moving Average Converging [LuxAlgo]", overlay = true,initial_capital=100,
+//      default_qty_type=strategy.percent_of_equity,default_qty_value=100,
+//      commission_type=strategy.commission.percent,commission_value=0.02)
+strategy("Moving Average Converging [LuxAlgo]", overlay = true)
+Percent = input.float(defval = 1,title = 'TP')
+//------------------------------------------------------------------------------
+//Settings
+//-----------------------------------------------------------------------------{
+length = input(100)
+
+incr   = input(10, "Increment")
+
+fast   = input(10)
+
+src    = input(close)
+
+//-----------------------------------------------------------------------------}
+//Calculations
+//-----------------------------------------------------------------------------{
+var ma    = 0.
+var fma   = 0.
+var alpha = 0.
+var k     = 1 / incr
+
+upper = ta.highest(length)
+lower = ta.lowest(length)
+init_ma = ta.sma(src, length)
+
+cross = ta.cross(src,ma)
+
+alpha := cross ? 2 / (length + 1): src > ma and upper > upper[1] ? alpha + k: src < ma and lower < lower[1] ? alpha + k: alpha
+
+ma := nz(ma[1] + alpha[1] * (src - ma[1]), init_ma)
+  
+fma := nz(cross ? math.avg(src, fma[1]): src > ma ? math.max(src, fma[1]) + (src - fma[1]) / fast: math.min(src, fma[1]) + (src - fma[1]) / fast,src)
+
+//-----------------------------------------------------------------------------}
+//Plots
+//-----------------------------------------------------------------------------{
+css = fma>ma?color.teal:color.red
+plot0 = plot(fma, "Fast MA" , color = #ff5d00, transp = 100)
+plot1 = plot(ma, "Converging MA", color = css)
+fill(plot0, plot1, css, "Fill", transp = 80)
+
+//-----------------------------------------------------------------------------}
+LCond = ta.crossover(fma,ma)
+SCond = ta.crossunder(fma,ma)
+if LCond
+    strategy.entry('Long',strategy.long)
+if SCond
+    strategy.entry('Short',strategy.short)
+
+avgGrossProfit(val) =>
+    strategy.closedtrades.profit(val)-strategy.closedtrades.commission(val)
+EquityVal = strategy.initial_capital
+EquityVal := strategy.closedtrades==1 ?strategy.initial_capital*(1+avgGrossProfit(0)/strategy.initial_capital) : strategy.closedtrades>strategy.closedtrades[1] ? EquityVal[1]*(1+avgGrossProfit(strategy.closedtrades-1)/EquityVal[1]):EquityVal[1]
+Profit = 100*(EquityVal-strategy.initial_capital)/strategy.initial_capital
+Labels = array.new_label(0)
+if barstate.islastconfirmedhistory
+    if array.size(Labels)>1
+        label.delete(array.get(Labels,0))
+    Labels.push(label.new(x=bar_index+5,y=high,text='Profit : '+str.tostring(Profit)+'%',color = color.black,textcolor = color.white))
+
+
