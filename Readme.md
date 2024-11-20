@@ -29,6 +29,13 @@ This repository contains a collection of trading algorithms developed for Tradin
    - Similar to Body Volume Weighted Price strategy
    - Simplified price weighting calculation
    - Configurable line lengths
+...
+
+...
+
+...
+
+...
 
 ## Features
 - Implemented in Pine Script v5
